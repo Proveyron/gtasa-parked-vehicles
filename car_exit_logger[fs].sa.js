@@ -300,9 +300,11 @@ function getCarQuaternion(c) {
 
 function setCarQuaternion(c, qx, qy, qz, qw) {
   if (!c || qx === undefined || qy === undefined || qz === undefined || qw === undefined) return;
+  const obj = toCar(c);
+  if (!obj) return;
   try {
-    if (typeof c.setQuaternion === 'function') c.setQuaternion(qx, qy, qz, qw);
-    else if (typeof Car !== 'undefined' && typeof Car.SetQuaternion === 'function') Car.SetQuaternion(c, qx, qy, qz, qw);
+    if (typeof obj.setQuaternion === 'function') obj.setQuaternion(+qx, +qy, +qz, +qw);
+    else if (typeof Car !== 'undefined' && typeof Car.SetQuaternion === 'function') Car.SetQuaternion(obj, +qx, +qy, +qz, +qw);
   } catch(e) {}
 }
 
@@ -1198,26 +1200,21 @@ function parseEntry(line) {
           }
         }
 
-        const upgrades = [];
-        if (parts[9]) {
-          for (const p of parts[9].split(",")) {
-            const n = parseInt(p, 10);
-            if (n >= 1000 && n <= 1193) upgrades.push(n);
-          }
-        }
-
-        // extras slot: parts[10] (was previously upgrades before extras were added)
-        // Support both old format (10=upgrades) and new format (10=extras, 11=upgrades)
         let qx = undefined, qy = undefined, qz = undefined, qw = undefined;
-        let upgradesPart = parts[9];  // legacy: upgrades at index 9
-        if (parts[10] !== undefined) {
-          const p9vals = parts[9] ? parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v)) : [];
-          const p10vals = parts[10] ? parts[10].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
+        let upgradesPart = "";
+
+        if (parts[9]) {
+          const p9vals = parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
           if (p9vals.length >= 4) {
             qx = p9vals[0]; qy = p9vals[1]; qz = p9vals[2]; qw = p9vals[3];
-            upgradesPart = parts[10];
+            upgradesPart = parts[10] || "";
+          } else {
+            upgradesPart = parts[9];
           }
+        } else if (parts[10]) {
+          upgradesPart = parts[10];
         }
+
         const finalUpgrades = [];
         if (upgradesPart) {
           for (const p of upgradesPart.split(",")) {
