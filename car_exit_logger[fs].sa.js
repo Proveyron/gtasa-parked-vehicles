@@ -122,14 +122,6 @@ function isAutomobileModel(mid) {
   return true;
 }
 
-function isCarInWater(c) {
-  if (!c) return false;
-  try {
-    if (typeof c.isInWater === 'function') return c.isInWater();
-    if (typeof Car !== 'undefined' && typeof Car.IsInWater === 'function') return Car.IsInWater(c);
-  } catch(e) {}
-  return false;
-}
 
 function isTunableVehicle(mid) {
   if (!mid) return false;
@@ -257,12 +249,7 @@ function isCarDestroyed(c) {
     else if (typeof Car !== 'undefined' && typeof Car.IsDead === 'function') dead = Car.IsDead(obj);
     if (dead) return true;
   } catch(e) {}
-  if (getCarHealth(obj) <= 250) return true;
-  try {
-    const mid = getCarModelId(obj);
-    if (!isBoatModel(mid) && isCarInWater(obj)) return true;
-  } catch(e) {}
-  return false;
+  return getCarHealth(obj) <= 250;
 }
 
 function isCarUsable(c) {
