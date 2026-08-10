@@ -285,6 +285,27 @@ function getCarHdg(c) {
   return 0;
 }
 
+function getCarQuaternion(c) {
+  if (!c) return null;
+  try {
+    let q = null;
+    if (typeof c.getQuaternion === 'function') q = c.getQuaternion();
+    else if (typeof Car !== 'undefined' && typeof Car.GetQuaternion === 'function') q = Car.GetQuaternion(c);
+    if (q && q.x !== undefined && q.y !== undefined && q.z !== undefined && q.w !== undefined) {
+      return { x: +q.x, y: +q.y, z: +q.z, w: +q.w };
+    }
+  } catch(e) {}
+  return null;
+}
+
+function setCarQuaternion(c, qx, qy, qz, qw) {
+  if (!c || qx === undefined || qy === undefined || qz === undefined || qw === undefined) return;
+  try {
+    if (typeof c.setQuaternion === 'function') c.setQuaternion(qx, qy, qz, qw);
+    else if (typeof Car !== 'undefined' && typeof Car.SetQuaternion === 'function') Car.SetQuaternion(c, qx, qy, qz, qw);
+  } catch(e) {}
+}
+
 function getCarColors(c) {
   if (!c) return { c1: 0, c2: 0 };
   try {
@@ -812,6 +833,9 @@ function runStreamer(char) {
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             try { nc.setHeading(d.heading); } catch(e) {}
+            if (d.qx !== undefined && d.qy !== undefined && d.qz !== undefined && d.qw !== undefined) {
+              setCarQuaternion(nc, d.qx, d.qy, d.qz, d.qw);
+            }
             try { nc.changeColor(d.primaryColor, d.secondaryColor); } catch(e) {}
             if (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) {
               setCarPaintjob(nc, d.paintjob);
@@ -878,8 +902,13 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
     const mDistSq = mDx*mDx + mDy*mDy + mDz*mDz;
     const mHdgDiff = Math.abs(hdg - d.heading);
 
-    if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
-      const hp = getCarHealth(h);
+    const quat = getCarQuaternion(h);
+    const mQuatDiff = (quat && d.qx !== undefined)
+      ? (Math.abs(quat.x - d.qx) + Math.abs(quat.y - d.qy) + Math.abs(quat.z - d.qz) + Math.abs(quat.w - d.qw))
+      : 0;
+
+    if (mDistSq >= 0.25 || mHdgDiff >= 5.0 || mQuatDiff >= 0.05) {
+      const hp     = getCarHealth(h);
       if (hp <= 250) return false;
 
       const clrs   = getCarColors(h);
@@ -891,6 +920,8 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
 
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+        qx: quat ? quat.x : undefined, qy: quat ? quat.y : undefined,
+        qz: quat ? quat.z : undefined, qw: quat ? quat.w : undefined,
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
         extraColor1: extraC.c3, extraColor2: extraC.c4,
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1040,7 +1071,9 @@ function formatMinifiedEntry(d) {
   const trStr = (d.tires && d.tires.length) ? d.tires.join(",") : "";
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
-  const exStr = (d.varA !== undefined && d.varA >= 0) ? d.varA + (d.varB !== undefined && d.varB >= 0 ? "," + d.varB : "") : "";
+  const qStr  = (d.qx !== undefined && d.qy !== undefined && d.qz !== undefined && d.qw !== undefined)
+               ? (d.qx.toFixed(4) + "," + d.qy.toFixed(4) + "," + d.qz.toFixed(4) + "," + d.qw.toFixed(4))
+               : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
 
   return d.modelId + "|" +
@@ -1052,7 +1085,7 @@ function formatMinifiedEntry(d) {
          trStr + "|" +
          dmStr + "|" +
          ddStr + "|" +
-         exStr + "|" +
+         qStr + "|" +
          uStr;
 }
 
@@ -1082,8 +1115,11 @@ function saveCarExit(car) {
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
 
+    const quat   = getCarQuaternion(car);
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+      qx: quat ? quat.x : undefined, qy: quat ? quat.y : undefined,
+      qz: quat ? quat.z : undefined, qw: quat ? quat.w : undefined,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
       extraColor1: extraC.c3, extraColor2: extraC.c4,
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1172,18 +1208,13 @@ function parseEntry(line) {
 
         // extras slot: parts[10] (was previously upgrades before extras were added)
         // Support both old format (10=upgrades) and new format (10=extras, 11=upgrades)
-        let varA = -1, varB = -1;
+        let qx = undefined, qy = undefined, qz = undefined, qw = undefined;
         let upgradesPart = parts[9];  // legacy: upgrades at index 9
         if (parts[10] !== undefined) {
-          // new format: index 9=extras, 10=upgrades
-          // detect by checking if parts[9] values are all in mod range (1000+)
-          const p9vals = parts[9] ? parts[9].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
+          const p9vals = parts[9] ? parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v)) : [];
           const p10vals = parts[10] ? parts[10].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
-          const p9IsExtras = p9vals.length === 0 || p9vals.every(v => v >= 0 && v <= 10);
-          const p10IsUpgrades = p10vals.length === 0 || p10vals.every(v => v >= 1000 && v <= 1193);
-          if (p9IsExtras || p10IsUpgrades) {
-            // new format
-            if (parts[9] && p9vals.length > 0) { varA = p9vals[0]; varB = p9vals[1] !== undefined ? p9vals[1] : -1; }
+          if (p9vals.length >= 4) {
+            qx = p9vals[0]; qy = p9vals[1]; qz = p9vals[2]; qw = p9vals[3];
             upgradesPart = parts[10];
           }
         }
@@ -1200,6 +1231,7 @@ function parseEntry(line) {
           name: getVehicleName(mid),
           x: x, y: y, z: z,
           heading: hdg,
+          qx: qx, qy: qy, qz: qz, qw: qw,
           primaryColor: c1,
           secondaryColor: c2,
           extraColor1: c3,
