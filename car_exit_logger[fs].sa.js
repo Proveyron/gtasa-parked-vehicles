@@ -304,25 +304,13 @@ function getCarMovablePart(c) {
       const v = +obj.getMovablePart();
       if (!isNaN(v) && v >= 0.0) return v;
     }
+    if (typeof Car !== 'undefined' && typeof Car.GetMovablePart === 'function') {
+      const v = +Car.GetMovablePart(obj);
+      if (!isNaN(v) && v >= 0.0) return v;
+    }
   } catch(e) {}
 
-  try {
-    let ptr = 0;
-    if (typeof obj.getPointer === 'function') ptr = obj.getPointer();
-    else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
-
-    if (ptr && typeof Memory !== 'undefined' && typeof Memory.ReadFloat === 'function') {
-      const v1 = Memory.ReadFloat(ptr + 0x8C0);
-      if (!isNaN(v1) && v1 >= 0.0) return v1;
-      const v2 = Memory.ReadFloat(ptr + 0x8C4);
-      if (!isNaN(v2) && v2 >= 0.0) return v2;
-      const v3 = Memory.ReadFloat(ptr + 0x8A4);
-      if (!isNaN(v3) && v3 >= 0.0) return v3;
-    }
-  } catch(e) {
-    log("LOGGER: getCarMovablePart error: " + (e.stack || e));
-  }
-  return 0.0;
+  return -1;
 }
 
 function setCarMovablePart(c, val) {
@@ -334,17 +322,6 @@ function setCarMovablePart(c, val) {
       obj.controlMovablePart(+val);
     } else if (typeof Car !== 'undefined' && typeof Car.ControlMovablePart === 'function') {
       Car.ControlMovablePart(obj, +val);
-    }
-  } catch(e) {}
-  try {
-    let ptr = 0;
-    if (typeof obj.getPointer === 'function') ptr = obj.getPointer();
-    else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
-
-    if (ptr && typeof Memory !== 'undefined' && typeof Memory.WriteFloat === 'function') {
-      Memory.WriteFloat(ptr + 0x8C0, +val);
-      Memory.WriteFloat(ptr + 0x8C4, +val);
-      Memory.WriteFloat(ptr + 0x8A4, +val);
     }
   } catch(e) {}
 }
@@ -902,11 +879,6 @@ function runStreamer(char) {
             cache = entries;
             writeDisk(cache);
             continue;
-          }
-
-          // Enforce movable part state continuously on stationary vehicle
-          if (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) {
-            setCarMovablePart(h, d.movablePart);
           }
 
           // If stationary/stopped after being hit or moved, update stored position & damage
