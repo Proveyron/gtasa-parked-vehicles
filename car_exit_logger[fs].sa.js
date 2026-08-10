@@ -728,10 +728,9 @@ function teleportTo(line, char, silent) {
 
   const name = getVehicleName(d.modelId);
   const coords = d.x.toFixed(0) + "," + d.y.toFixed(0);
-  const hpText = (CFG.saveHealth && d.health) ? (" | ~w~" + d.health + " HP") : "";
   log("LOGGER: teleported to " + name + " at " + coords + " (Health: " + (d.health || 1000) + " HP)");
   if (!silent && CFG.tooltips) {
-    showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + coords + hpText + "~g~)!");
+    showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + coords + "~g~)!");
   }
   runStreamer(char);
 }
@@ -1000,7 +999,7 @@ function saveCarExit(car) {
     const hp = getCarHealth(car);
     if (hp <= 250 || isCarDestroyed(car)) {
       log("LOGGER: Skipped saving exit — vehicle health <= 250 (" + hp + " HP)");
-      if (CFG.tooltips) showTextBox("~r~Vehicle health < 250!~n~~w~Exit position not saved.");
+      if (CFG.tooltips) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
       return;
     }
     const mid = getCarModelId(car);
@@ -1038,10 +1037,9 @@ function saveCarExit(car) {
     const key = getUniqueKey(d);
     if (key) streamed[key] = car;
 
-    const hpText = CFG.saveHealth ? (" ~w~(" + hp + " HP)") : "";
     const trText = (CFG.saveTires && tires.length) ? (" ~r~[" + tires.length + " flat tire" + (tires.length > 1 ? "s" : "") + "]") : "";
     log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " | Health: " + hp + " HP (" + line + ")");
-    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + hpText + trText);
+    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + trText);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
   }
@@ -1426,7 +1424,7 @@ while (true) {
       if (isCarDestroyed(lastCarHandle) && !fireNotified) {
         fireNotified = true;
         log("LOGGER: Vehicle caught fire / health <= 250 while driving");
-        if (CFG.tooltips) showTextBox("~r~Vehicle health < 250!~n~~w~Exit position not saved.");
+        if (CFG.tooltips) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
       }
     }
   } else if (wasInCar) {
@@ -1440,7 +1438,7 @@ while (true) {
           pending.push({ car: lastCarHandle, t: Date.now() });
         } else {
           log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
-          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle health < 250!~n~~w~Exit position not saved.");
+          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
         }
       } catch(e) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
