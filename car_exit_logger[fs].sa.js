@@ -786,6 +786,13 @@ function runStreamer(char) {
             writeDisk(cache);
             continue;
           }
+
+          // If stationary/stopped after being hit or moved, update stored position & damage
+          const rawSpd = getCarSpd(h);
+          const speed  = (isNaN(rawSpd) || rawSpd < 0) ? 0 : rawSpd;
+          if (speed < 0.05) {
+            updateParkedCarStateIfNeeded(h, d, i, entries);
+          }
         } else {
           // If player is driving right through this exact spot (< 6m), defer spawn to prevent collision mesh rebuild crush
           if (playerCar && sq < 36.0) {
@@ -841,6 +848,7 @@ function runStreamer(char) {
           } catch(e) {}
 
           if (!isPlayerActiveCar && isCarValid(h)) {
+            updateParkedCarStateIfNeeded(h, d, i, entries);
             deleteCarHandle(h);
             log("LOGGER: Streamed OUT vehicle " + (d.name || getVehicleName(d.modelId)));
           }
