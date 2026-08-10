@@ -17,9 +17,9 @@ A CLEO Redux script (`car_exit_logger[fs].sa.js`) for Grand Theft Auto: San Andr
 
 ---
 
-## Configuration (`vehicles.ini`)
+## Configuration (`car_exit_logger.ini`)
 
-The script reads its configuration settings from `cleo\vehicles.ini`. Below are the configurable keys:
+The script reads its configuration settings from `cleo\car_exit_logger.ini`. Below are the configurable keys:
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
