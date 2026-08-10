@@ -554,7 +554,7 @@ function loadModelSync(id) {
 
 function spawnCarAt(modelId, x, y, z) {
   if (!loadModelSync(modelId)) return null;
-  const spawnZ = z - 0.5;
+  const spawnZ = z - 1.0;
   const car = Car.Create(modelId, x, y, spawnZ);
   if (car) {
     try {
