@@ -13,6 +13,7 @@ A CLEO Redux script (`car_exit_logger[fs].sa.js`) for Grand Theft Auto: San Andr
 - **Interactive F6 Management Menu**: On-screen GUI to list parked vehicles, teleport to any vehicle, repair, unlock, or clear persistent records.
 - **Hot-Reload Support (F7)**: Reload configuration settings and re-stream all parked vehicles instantly in-game without restarting.
 - **Built-in `PACKER` Cheat**: Type `PACKER` on the keyboard to spawn a Packer (model 443) utility truck positioned 2 meters in front of CJ.
+- **Zero Hardcoded Model Lists**: Dynamically classifies vehicle types (boats, aircraft, bikes, automobiles) via native GTA SA engine opcodes (`IsThisModelABoat`, `IsThisModelAHeli`, `IsThisModelAPlane`, `IsThisModelACar`), fully supporting custom modded and add-on vehicle models without script modification.
 
 ---
 
@@ -136,7 +137,19 @@ Parses a minified pipe-delimited entry string into a structured JavaScript vehic
 
 ---
 
-### Vehicle Entity & Property Wrappers
+### Vehicle Classification & Entity Wrappers
+
+#### `isBoatModel(mid)`
+Queries the native game engine opcode `Car.IsThisModelABoat(mid)` to dynamically identify watercraft without static model lists.
+
+#### `isAircraftModel(mid)`
+Queries native engine opcodes `Car.IsThisModelAHeli(mid)` and `Car.IsThisModelAPlane(mid)` to dynamically identify helicopters and airplanes without static model lists.
+
+#### `isAutomobileModel(mid)`
+Queries `Car.IsThisModelACar(mid)` to dynamically identify cars, trucks, and vans without static model lists.
+
+#### `isBikeModel(mid)`
+Evaluates native vehicle classification queries to identify motorcycles and bicycles without static model lists.
 
 #### `toCar(c)`
 Ensures a given input `c` (handle or object) is wrapped into a valid CLEO Redux `Car` object wrapper.
@@ -155,9 +168,6 @@ Verifies that the vehicle is valid and not destroyed.
 
 #### `getCarModelId(c)`
 Retrieves the GTA SA model ID (`400`-`611`) for the specified vehicle.
-
-#### `isAutomobileModel(mid)`
-Determines if a model ID corresponds to a standard 4-wheel automobile, truck, or van.
 
 #### `getCarPos(c)`
 Returns 3D spatial coordinates `{ x, y, z }` for the specified vehicle.

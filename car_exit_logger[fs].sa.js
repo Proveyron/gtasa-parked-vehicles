@@ -55,27 +55,40 @@ function probeAndCacheTunability(car, mid) {
     tunableCache[mid] = false;
   }
 }
-const BOATS = [430, 446, 452, 453, 454, 472, 473, 484, 493, 595];
-const BIKES = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 571, 581, 586];
-const AIRCRAFT = [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593];
 function isBoatModel(mid) {
-  return BOATS.indexOf(mid) !== -1;
+  if (!mid) return false;
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.IsThisModelABoat === 'function') {
+      return !!Car.IsThisModelABoat(mid);
+    }
+  } catch(e) {}
+  return false;
 }
-function isBikeModel(mid) {
-  return BIKES.indexOf(mid) !== -1;
-}
+
 function isAircraftModel(mid) {
-  return AIRCRAFT.indexOf(mid) !== -1;
+  if (!mid) return false;
+  try {
+    if (typeof Car !== 'undefined') {
+      if (typeof Car.IsThisModelAHeli === 'function' && Car.IsThisModelAHeli(mid)) return true;
+      if (typeof Car.IsThisModelAPlane === 'function' && Car.IsThisModelAPlane(mid)) return true;
+    }
+  } catch(e) {}
+  return false;
 }
+
 function isAutomobileModel(mid) {
-  if (!mid || mid <= 0) return false;
-  if (isBoatModel(mid) || isBikeModel(mid) || isAircraftModel(mid)) return false;
+  if (!mid) return false;
   try {
     if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
       return !!Car.IsThisModelACar(mid);
     }
   } catch(e) {}
-  return true;
+  return !isBoatModel(mid) && !isAircraftModel(mid);
+}
+
+function isBikeModel(mid) {
+  if (!mid) return false;
+  return !isBoatModel(mid) && !isAircraftModel(mid) && !isAutomobileModel(mid);
 }
 function isTunableVehicle(mid) {
   if (!mid) return false;
