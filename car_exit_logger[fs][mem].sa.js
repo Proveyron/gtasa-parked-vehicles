@@ -95,6 +95,21 @@ function probeAndCacheTunability(car, mid) {
   }
 }
 
+const BOATS = [430, 446, 452, 453, 454, 472, 473, 484, 493, 595];
+const BIKES = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 571, 581, 586];
+const AIRCRAFT = [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593];
+
+function isAutomobileModel(mid) {
+  if (!mid || mid <= 0) return false;
+  if (BOATS.indexOf(mid) !== -1 || BIKES.indexOf(mid) !== -1 || AIRCRAFT.indexOf(mid) !== -1) return false;
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
+      return !!Car.IsThisModelACar(mid);
+    }
+  } catch(e) {}
+  return true;
+}
+
 function isTunableVehicle(mid) {
   if (!mid) return false;
   // If cached use that, otherwise conservatively return false
@@ -360,6 +375,8 @@ function setCarHealth(c, health) {
 function getCarDamage(c) {
   const obj = toCar(c);
   if (!obj) return { panels: [], doors: [] };
+  const mid = getCarModelId(c);
+  if (!isAutomobileModel(mid)) return { panels: [], doors: [] };
 
   const doors = [];
   for (let d = 0; d <= 5; d++) {
@@ -393,6 +410,8 @@ function applyStoredDamage(c, panels, doors) {
   if (!c) return;
   const obj = toCar(c);
   if (!obj) return;
+  const mid = getCarModelId(c);
+  if (!isAutomobileModel(mid)) return;
 
   if (panels && panels.length) {
     for (const p of panels) {
@@ -441,6 +460,8 @@ function setCarPoppedTires(c, tiresArray) {
 // varA/varB: -1 = no extra, 0..5 = extra index
 function getCarExtras(c) {
   try {
+    const mid = getCarModelId(c);
+    if (!isAutomobileModel(mid)) return [-1, -1];
     if (typeof Memory === 'undefined') return [-1, -1];
     const ptr = Memory.GetVehiclePointer(c);
     if (!ptr || ptr === 0) return [-1, -1];
@@ -458,6 +479,7 @@ function getCarExtras(c) {
 // Applies extras before the next Car.Create by calling SetModelComponents (0506)
 function applyExtrasBeforeSpawn(modelId, varA, varB) {
   if (varA < 0 && varB < 0) return;
+  if (!isAutomobileModel(modelId)) return;
   try {
     if (typeof Car !== 'undefined' && typeof Car.SetModelComponents === 'function') {
       Car.SetModelComponents(0, varA < 0 ? -1 : varA, varB < 0 ? -1 : varB);
