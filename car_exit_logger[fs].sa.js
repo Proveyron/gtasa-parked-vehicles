@@ -792,7 +792,7 @@ function runStreamer(char) {
             continue;
           }
 
-          clearNearbyNonTracked(d.x, d.y, d.z, 3.0, playerCar);
+          clearNearbyNonTracked(d.x, d.y, d.z, 0.5, playerCar);
           applyExtrasBeforeSpawn(d.modelId, d.varA !== undefined ? d.varA : -1, d.varB !== undefined ? d.varB : -1);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
