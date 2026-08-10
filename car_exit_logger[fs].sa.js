@@ -292,14 +292,11 @@ function getCarMovablePart(c) {
   if (!c) return -1;
   const obj = toCar(c);
   if (!obj) return -1;
-  const mid = getCarModelId(c);
-  if (mid !== 443 && mid !== 530 && mid !== 406 && mid !== 486 && mid !== 525 && mid !== 531 && mid !== 592) {
-    return -1;
-  }
+  const mid = getCarModelId(obj);
   try {
     if (typeof obj.getMovablePart === 'function') {
       const v = +obj.getMovablePart();
-      if (!isNaN(v) && v >= 0.0 && v <= 1.0) return v;
+      if (!isNaN(v) && v >= 0.0 && v <= 360.0) return v;
     }
   } catch(e) {}
   try {
@@ -308,14 +305,17 @@ function getCarMovablePart(c) {
     else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
 
     if (ptr && typeof Memory !== 'undefined' && typeof Memory.ReadFloat === 'function') {
-      const v1 = Memory.ReadFloat(ptr + 0x8C0);
-      if (!isNaN(v1) && v1 >= 0.0 && v1 <= 1.0) return v1;
-      const v2 = Memory.ReadFloat(ptr + 0x8C4);
-      if (!isNaN(v2) && v2 >= 0.0 && v2 <= 1.0) return v2;
-      const v3 = Memory.ReadFloat(ptr + 0x8A4);
-      if (!isNaN(v3) && v3 >= 0.0 && v3 <= 1.0) return v3;
+      for (let offset = 0x870; offset <= 0x950; offset += 4) {
+        const val = Memory.ReadFloat(ptr + offset);
+        if (!isNaN(val) && val > 0.0001 && val <= 360.0) {
+          log("LOGGER: getCarMovablePart (model=" + mid + ") found float at ptr+0x" + offset.toString(16) + " = " + val);
+          return val;
+        }
+      }
     }
-  } catch(e) {}
+  } catch(e) {
+    log("LOGGER: getCarMovablePart error: " + (e.stack || e));
+  }
   return -1;
 }
 
