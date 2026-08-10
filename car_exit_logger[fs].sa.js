@@ -926,7 +926,7 @@ function runStreamer(char) {
             continue;
           }
 
-          clearNearbyNonTracked(d.x, d.y, d.z, 0.1, playerCar);
+          clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             setCarPitchAndHeading(nc, d.pitch || 0, d.heading || 0);
