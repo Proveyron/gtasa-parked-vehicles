@@ -110,76 +110,6 @@ function isTunableVehicle(mid) {
 }
 
 
-
-//  DYNAMIC VEHICLE & LOCATION RESOLVERS (NO STATIC TEXT BLOAT)
-// ════════════════════════════════════════════════════════════════
-function shortenLoc(loc) {
-  if (!loc) return "";
-  if (loc.length <= 14) return loc;
-  return loc.substring(0, 13) + ".";
-}
-
-function getMapLocation(x, y, z) {
-  if (x === undefined || y === undefined || z === undefined) return "";
-
-  // 1. Bounds guard for custom map coordinates (> 3000)
-  if (x > 3000 || x < -3000 || y > 3000 || y < -3000) {
-    if (x > 8000 && y > 8000) return "Stars & Stripes";
-    if (x > 8000 && y < -5000) return "Peachtree";
-    return "Custom Area";
-  }
-
-  // 2. Query native zone opcodes (Zone.GetName / Zone.GetTextKey)
-  let rawKey = "";
-  try {
-    if (typeof Zone !== 'undefined') {
-      if (typeof Zone.GetName === 'function') rawKey = Zone.GetName(x, y, z);
-      if ((!rawKey || rawKey === "") && typeof Zone.GetTextKey === 'function') rawKey = Zone.GetTextKey(x, y, z);
-    }
-  } catch(e) {}
-
-  if (rawKey && rawKey.trim().length > 0) {
-    const k = rawKey.trim();
-    // 3. Resolve GXT key to actual localized zone text (e.g. "GAN1" -> "Ganton")
-    try {
-      let localized = "";
-      if (typeof Text !== 'undefined' && typeof Text.GetLabelString === 'function') {
-        localized = Text.GetLabelString(k);
-      } else if (typeof GetLabelString === 'function') {
-        localized = GetLabelString(k);
-      }
-      if (localized && localized.trim().length > 0 && localized !== k) {
-        return localized.trim();
-      }
-    } catch(e) {}
-
-    // If GXT key is readable text already
-    if (k.length > 3) return formatRawVehicleKey(k);
-  }
-
-  // 4. Region fallback by coordinates if zone opcode returns nothing
-  return estimateRegionByCoords(x, y, z);
-}
-
-function estimateRegionByCoords(x, y, z) {
-  if (y < -400 && x > -1000) return "Los Santos";
-  if (y < -1000 && x <= -1000) return "Whetstone";
-  if (y >= -400 && y < 1600 && x < -400) return "San Fierro";
-  if (y >= -400 && y <= 800 && x >= -1000 && x <= 1200) return x < -200 ? "Flint County" : "Red County";
-  if (y > 400 && x > 400) return "Las Venturas";
-  if (y > 800 && x <= -1000) return "Tierra Robada";
-  if (y > 800 && x > -1000 && x <= 400) return "Bone County";
-  return "San Andreas";
-}
-
-function formatRawVehicleKey(key) {
-  if (!key) return "";
-  const clean = key.replace(/_/g, ' ');
-  return clean.replace(/\w\S*/g, function(txt) {
-    return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-  });
-}
-
 function getVehicleName(modelId) {
   if (!modelId) return "Vehicle";
 
@@ -209,8 +139,8 @@ function getVehicleName(modelId) {
         return localized.trim();
       }
 
-      // Fallback: format raw GXT key if readable (e.g. "BLISTRA" -> "Blistra")
-      const formatted = formatRawVehicleKey(k);
+      // Fallback: title-case the raw GXT key (e.g. "BLISTRA" -> "Blistra")
+      const formatted = k.charAt(0).toUpperCase() + k.slice(1).toLowerCase();
       if (formatted && formatted.length > 2) return formatted;
     }
   } catch(e) {}
@@ -797,11 +727,11 @@ function teleportTo(line, char, silent) {
   } catch(e) {}
 
   const name = getVehicleName(d.modelId);
-  const loc  = d.location || getMapLocation(d.x, d.y, d.z);
+  const coords = d.x.toFixed(0) + "," + d.y.toFixed(0);
   const hpText = (CFG.saveHealth && d.health) ? (" | ~w~" + d.health + " HP") : "";
-  log("LOGGER: teleported to " + name + " at " + loc + " (Health: " + (d.health || 1000) + " HP)");
+  log("LOGGER: teleported to " + name + " at " + coords + " (Health: " + (d.health || 1000) + " HP)");
   if (!silent && CFG.tooltips) {
-    showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + loc + hpText + "~g~)!");
+    showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + coords + hpText + "~g~)!");
   }
   runStreamer(char);
 }
@@ -847,9 +777,8 @@ function runStreamer(char) {
           }
           // If the spawned vehicle was destroyed / exploded
           if (!isCarValid(h) || isCarDestroyed(h)) {
-            const name = d.name || getVehicleName(d.modelId);
-            const loc  = d.location || getMapLocation(d.x, d.y, d.z);
-            log("LOGGER: Parked vehicle " + name + " at " + loc + " was destroyed! Removed from list.");
+            const name = getVehicleName(d.modelId);
+            log("LOGGER: Parked vehicle " + name + " at " + d.x.toFixed(0) + "," + d.y.toFixed(0) + " was destroyed! Removed from list.");
             if (CFG.tooltips) showTextBox("~r~Parked ~y~" + name + " ~r~was destroyed! Entry removed.");
 
             delete streamed[key];
@@ -973,15 +902,15 @@ function tryClaimCar(car, char) {
     if (bestIdx !== -1) {
       const ln  = ents[bestIdx];
       const d   = parseEntry(ln);
-      const loc = d ? (d.location || getMapLocation(d.x, d.y, d.z)) : "";
       const key = d ? getUniqueKey(d) : "";
       if (key && streamed[key]) delete streamed[key];
       if (streamed[ln]) delete streamed[ln];
       ents.splice(bestIdx, 1);
       writeDisk(ents);
       cache = ents;
-      log("LOGGER: claimed vehicle at " + loc + ", entry removed");
-      if (CFG.tooltips) showTextBox("~y~Claimed vehicle! ~g~Entry at ~y~" + loc + "~g~ removed.");
+      const coords = d ? (d.x.toFixed(0) + "," + d.y.toFixed(0)) : "";
+      log("LOGGER: claimed vehicle at " + coords + ", entry removed");
+      if (CFG.tooltips) showTextBox("~y~Claimed vehicle! ~g~Entry removed.");
     }
   } catch(e) {
     log("LOGGER: claim error: " + (e.stack || e));
@@ -1083,7 +1012,6 @@ function saveCarExit(car) {
     const extraC = getCarExtraColors(car);
     const mods   = getCarMods(car, mid);
     const name   = getVehicleName(mid);
-    const loc    = getMapLocation(cp.x, cp.y, cp.z);
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
@@ -1108,12 +1036,12 @@ function saveCarExit(car) {
 
     const d   = parseEntry(line);
     const key = getUniqueKey(d);
-    if (key) streamed[key] = car;   // link live handle — prevents streamer re-spawning
+    if (key) streamed[key] = car;
 
     const hpText = CFG.saveHealth ? (" ~w~(" + hp + " HP)") : "";
     const trText = (CFG.saveTires && tires.length) ? (" ~r~[" + tires.length + " flat tire" + (tires.length > 1 ? "s" : "") + "]") : "";
-    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + loc + " | Health: " + hp + " HP (" + line + ")");
-    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + "~g~ at ~y~" + loc + hpText + trText);
+    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " | Health: " + hp + " HP (" + line + ")");
+    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + hpText + trText);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
   }
@@ -1207,7 +1135,6 @@ function parseEntry(line) {
         return {
           modelId: mid,
           name: getVehicleName(mid),
-          location: getMapLocation(x, y, z),
           x: x, y: y, z: z,
           heading: hdg,
           primaryColor: c1,
@@ -1231,7 +1158,6 @@ function parseEntry(line) {
     const cM   = s.match(/(?:Coords:|C:)(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/);
     if (!mM || !cM) return null;
     const nM   = s.match(/(?:Name:|N:)([^|\r\n]+)/);
-    const locM = s.match(/(?:Location:|L:)([^|\r\n]+)/);
     const hM   = s.match(/(?:Heading:|H:)(-?[\d.]+)/);
     const clM  = s.match(/(?:Colors:|Cl:)(\d+),(\d+)(?:,(\d+),(\d+))?/);
     const pjM  = s.match(/(?:Paintjob:|P:)(\d+)/);
@@ -1277,7 +1203,6 @@ function parseEntry(line) {
     return {
       modelId:        mid,
       name:           (nM && nM[1].trim()) ? nM[1].trim() : getVehicleName(mid),
-      location:       (locM && locM[1].trim()) ? locM[1].trim() : getMapLocation(x, y, z),
       x:              x,
       y:              y,
       z:              z,
