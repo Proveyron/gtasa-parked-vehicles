@@ -1,17 +1,5 @@
-/// <reference path=".config/sa.d.ts" />
-
-// ════════════════════════════════════════════════════════════════
-//  CAR EXIT LOGGER + PROXIMITY STREAMER
-//  Pattern: commute[fs].jsalt — showTextBox, wait(0), manual wasDown,
-//  blocking sub-loop menus, no IsKeyJustPressed, no Text.* namespace.
-// ════════════════════════════════════════════════════════════════
-
-// ════════════════════════════════════════════════════════════════
-//  CONFIG
-// ════════════════════════════════════════════════════════════════
 const CONFIG_PATH = "CLEO\\car_exit_logger.ini";
 const PARKED_PATH = "CLEO\\vehicles.parked";
-
 const CFG = {
   streamIn:    150.0,
   streamOut:   170.0,
@@ -21,10 +9,6 @@ const CFG = {
   saveHealth:  true,
   saveTires:   true,
 };
-
-// ════════════════════════════════════════════════════════════════
-//  KEY CONSTANTS
-// ════════════════════════════════════════════════════════════════
 const VK_F5    = 116;
 const VK_F6    = 117;
 const VK_F7    = 118;
@@ -44,73 +28,45 @@ const VK_KEY_W = 87;
 const VK_KEY_S = 83;
 const VK_KEY_A = 65;
 const VK_KEY_D = 68;
-
-// ════════════════════════════════════════════════════════════════
-//  MODULE-SCOPE wasDown VARS
-// ════════════════════════════════════════════════════════════════
 let f5WasDown  = false;
 let f6WasDown  = false;
 let f7WasDown  = false;
-
-// ════════════════════════════════════════════════════════════════
-//  DYNAMIC TUNABILITY PROBE
-//  Detects mod-shop compatibility at runtime using GTA SA model
-//  type opcodes (0A01/081E/0820/081F). Results cached per model ID.
-//  A slot-0 probe at vehicle ENTRY TIME confirms actual tunability.
-//  No static lists — works with modded vehicles automatically.
-// ════════════════════════════════════════════════════════════════
-const tunableCache = {};   // modelId -> true | false
-
+const tunableCache = {};
 function probeAndCacheTunability(car, mid) {
-  // Already cached
   if (tunableCache.hasOwnProperty(mid)) return;
-
   try {
-    // Step 1: Model type check — only automobiles can have tuning mods
     let isCar = false;
     if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
       isCar = !!Car.IsThisModelACar(mid);
     }
     if (!isCar) { tunableCache[mid] = false; return; }
-
-    // Step 2: Emergency vehicles can't visit mod shops
     try {
       if (typeof car.isEmergencyServices === 'function' && car.isEmergencyServices()) {
         tunableCache[mid] = false;
         return;
       }
     } catch(e) {}
-
-    // Step 3: Live slot-0 probe — safe here because we're in a wait(0) main-loop frame
-    //         (not inside saveCarExit which is called from runPending with no wait)
     let slot0 = undefined;
     try {
       if (typeof car.getCurrentMod === 'function') slot0 = car.getCurrentMod(0);
     } catch(e) { tunableCache[mid] = false; return; }
-
-    // slot0 returns 0 for no mod, or a mod ID. Anything except an exception = tunable.
     tunableCache[mid] = (slot0 !== undefined && slot0 !== null);
   } catch(e) {
     tunableCache[mid] = false;
   }
 }
-
 const BOATS = [430, 446, 452, 453, 454, 472, 473, 484, 493, 595];
 const BIKES = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 571, 581, 586];
 const AIRCRAFT = [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593];
-
 function isBoatModel(mid) {
   return BOATS.indexOf(mid) !== -1;
 }
-
 function isBikeModel(mid) {
   return BIKES.indexOf(mid) !== -1;
 }
-
 function isAircraftModel(mid) {
   return AIRCRAFT.indexOf(mid) !== -1;
 }
-
 function isAutomobileModel(mid) {
   if (!mid || mid <= 0) return false;
   if (isBoatModel(mid) || isBikeModel(mid) || isAircraftModel(mid)) return false;
@@ -121,14 +77,9 @@ function isAutomobileModel(mid) {
   } catch(e) {}
   return true;
 }
-
-
 function isTunableVehicle(mid) {
   if (!mid) return false;
-  // If cached use that, otherwise conservatively return false
-  // (probeAndCacheTunability must be called at entry time first)
   if (tunableCache.hasOwnProperty(mid)) return tunableCache[mid];
-  // Fallback for vehicles entered before probe: use model type only
   try {
     if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
       return !!Car.IsThisModelACar(mid);
@@ -136,12 +87,8 @@ function isTunableVehicle(mid) {
   } catch(e) {}
   return false;
 }
-
-
 function getVehicleName(modelId) {
   if (!modelId) return "Vehicle";
-
-  // 1. Dynamic memory lookup via CLEO opcodes: CModelInfo array (0ADB) -> CText table (0ADE)
   try {
     let rawKey = "";
     if (typeof GetNameOfVehicleModel === 'function') {
@@ -149,11 +96,8 @@ function getVehicleName(modelId) {
     } else if (typeof Car !== 'undefined' && typeof Car.GetNameOfModel === 'function') {
       rawKey = Car.GetNameOfModel(modelId);
     }
-
     if (rawKey && rawKey.trim().length > 0) {
       const k = rawKey.trim();
-
-      // Query localized text label directly from game RAM memory (CText table including custom FXTs)
       let localized = "";
       try {
         if (typeof GetLabelString === 'function') {
@@ -162,22 +106,15 @@ function getVehicleName(modelId) {
           localized = Text.GetLabelString(k);
         }
       } catch(e) {}
-
       if (localized && localized.trim().length > 0 && localized.trim() !== k) {
         return localized.trim();
       }
-
-      // Fallback: title-case the raw GXT key (e.g. "BLISTRA" -> "Blistra")
       const formatted = k.charAt(0).toUpperCase() + k.slice(1).toLowerCase();
       if (formatted && formatted.length > 2) return formatted;
     }
   } catch(e) {}
-
-
-
   return "" + modelId;
 }
-
 function getVehicleGxtKey(modelId) {
   if (!modelId) return "DUMMY";
   try {
@@ -195,9 +132,6 @@ function getVehicleGxtKey(modelId) {
   } catch(e) {}
   return "DUMMY";
 }
-
-//  GLOBAL STATE
-// ════════════════════════════════════════════════════════════════
 let wasInCar       = false;
 let fireNotified   = false;
 let lastCarHandle  = null;
@@ -205,19 +139,14 @@ let pending        = [];
 let lastPendingMs  = 0;
 let lastStreamerMs = 0;
 let lastFireCheckMs = 0;
-let streamed       = {};   // entry string → car handle
-let spawnTimeMap   = {};   // key → spawn timestamp ms
+let streamed       = {};
+let spawnTimeMap   = {};
 let cache          = [];
-
-// ════════════════════════════════════════════════════════════════
-//  SAFE CAR WRAPPERS
-// ════════════════════════════════════════════════════════════════
 function toCar(c) {
   if (!c) return null;
   if (typeof c === 'object' && c !== null) return c;
   try { return new Car(c); } catch(e) { return null; }
 }
-
 function getCarHandle(char) {
   try {
     if (!char.isInAnyCar()) return null;
@@ -230,7 +159,6 @@ function getCarHandle(char) {
     return null;
   } catch(e) { return null; }
 }
-
 function isCarValid(c) {
   if (!c) return false;
   const obj = toCar(c);
@@ -239,7 +167,6 @@ function isCarValid(c) {
   try { if (typeof Car !== 'undefined' && typeof Car.DoesExist === 'function') return Car.DoesExist(obj); } catch(e) {}
   return true;
 }
-
 function isCarDestroyed(c) {
   if (!c) return true;
   const obj = toCar(c);
@@ -252,18 +179,15 @@ function isCarDestroyed(c) {
   } catch(e) {}
   return getCarHealth(obj) <= 250;
 }
-
 function isCarUsable(c) {
   return !isCarDestroyed(c);
 }
-
 function getCarModelId(c) {
   if (!c) return 0;
   try { if (typeof c.getModel === 'function') return c.getModel(); } catch(e) {}
   try { if (typeof Car !== 'undefined' && typeof Car.GetModel === 'function') return Car.GetModel(c); } catch(e) {}
   return 0;
 }
-
 function getCarPos(c) {
   try {
     if (typeof c.getCoordinates === 'function') {
@@ -279,19 +203,11 @@ function getCarPos(c) {
   } catch(e) {}
   return { x: 0, y: 0, z: 0 };
 }
-
 function getCarHdg(c) {
   try { if (typeof c.getHeading === 'function') return +c.getHeading(); } catch(e) {}
   try { if (typeof Car !== 'undefined' && typeof Car.GetHeading === 'function') return +Car.GetHeading(c); } catch(e) {}
   return 0;
 }
-
-
-
-
-
-
-
 function getCarColors(c) {
   if (!c) return { c1: 0, c2: 0 };
   try {
@@ -316,7 +232,6 @@ function getCarColors(c) {
   } catch(e) {}
   return { c1: 0, c2: 0 };
 }
-
 function getCarExtraColors(c) {
   try {
     if (typeof c.getExtraColors === 'function') {
@@ -337,7 +252,6 @@ function getCarExtraColors(c) {
   } catch(e) {}
   return { c3: -1, c4: -1 };
 }
-
 function setCarExtraColors(c, c3, c4) {
   if (!c || c3 === undefined || c3 === null || c3 < 0 || c4 === undefined || c4 === null || c4 < 0) return;
   try {
@@ -348,7 +262,6 @@ function setCarExtraColors(c, c3, c4) {
     }
   } catch(e) {}
 }
-
 function getCarPaintjob(c) {
   if (!c) return -1;
   try {
@@ -359,7 +272,6 @@ function getCarPaintjob(c) {
   } catch(e) {}
   return -1;
 }
-
 function setCarPaintjob(c, pjId) {
   if (!c || pjId === undefined || pjId === null || pjId < 0) return;
   try {
@@ -367,13 +279,11 @@ function setCarPaintjob(c, pjId) {
     else if (typeof Car !== 'undefined' && typeof Car.GivePaintjob === 'function') Car.GivePaintjob(c, pjId);
   } catch(e) {}
 }
-
 function getCarSpd(c) {
   try { if (typeof c.getSpeed === 'function') return +c.getSpeed(); } catch(e) {}
   try { if (typeof Car !== 'undefined' && typeof Car.GetSpeed === 'function') return +Car.GetSpeed(c); } catch(e) {}
   return 0;
 }
-
 function getCarHealth(c) {
   if (!c) return 1000;
   try {
@@ -386,7 +296,6 @@ function getCarHealth(c) {
   }
   return 1000;
 }
-
 function setCarHealth(c, health) {
   if (!c || health <= 0) return;
   const h = Math.round(+health);
@@ -397,13 +306,11 @@ function setCarHealth(c, health) {
     log("LOGGER: setCarHealth error: " + (e.stack || e));
   }
 }
-
 function getCarDamage(c) {
   const obj = toCar(c);
   if (!obj) return { panels: [], doors: [] };
   const mid = getCarModelId(c);
   if (!isAutomobileModel(mid)) return { panels: [], doors: [] };
-
   const doors = [];
   for (let d = 0; d <= 5; d++) {
     try {
@@ -413,7 +320,6 @@ function getCarDamage(c) {
       if (isDam) doors.push(d);
     } catch(e) {}
   }
-
   const panels = [];
   for (let p = 0; p <= 6; p++) {
     try {
@@ -423,22 +329,18 @@ function getCarDamage(c) {
       if (isDam) panels.push(p);
     } catch(e) {}
   }
-
   if (!panels.length && doors.length) {
-    if (doors.indexOf(0) !== -1) panels.push(2); // Bonnet
-    if (doors.indexOf(1) !== -1) panels.push(3); // Trunk
+    if (doors.indexOf(0) !== -1) panels.push(2);
+    if (doors.indexOf(1) !== -1) panels.push(3);
   }
-
   return { panels: panels, doors: doors };
 }
-
 function applyStoredDamage(c, panels, doors) {
   if (!c) return;
   const obj = toCar(c);
   if (!obj) return;
   const mid = getCarModelId(c);
   if (!isAutomobileModel(mid)) return;
-
   if (panels && panels.length) {
     for (const p of panels) {
       try {
@@ -447,7 +349,6 @@ function applyStoredDamage(c, panels, doors) {
       } catch(e) {}
     }
   }
-
   if (doors && doors.length) {
     for (const d of doors) {
       try {
@@ -457,13 +358,11 @@ function applyStoredDamage(c, panels, doors) {
     }
   }
 }
-
 function getCarPoppedTires(c) {
   if (!c) return [];
   const mid = getCarModelId(c);
   if (mid === 509 || mid === 481 || mid === 510) return [];
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return [];
-
   const popped = [];
   for (let i = 0; i < 4; i++) {
     try {
@@ -475,7 +374,6 @@ function getCarPoppedTires(c) {
   }
   return popped;
 }
-
 function setCarPoppedTires(c, tiresArray) {
   if (!c || !tiresArray || !tiresArray.length) return;
   const mid = getCarModelId(c);
@@ -488,9 +386,6 @@ function setCarPoppedTires(c, tiresArray) {
     } catch(e) {}
   }
 }
-
-
-
 function deleteCarHandle(c) {
   if (!c) return;
   try {
@@ -507,13 +402,11 @@ function deleteCarHandle(c) {
   try { if (typeof c.delete === 'function') { c.delete(); return; } } catch(e) {}
   try { if (typeof Car !== 'undefined' && typeof Car.Delete === 'function') { Car.Delete(c); return; } } catch(e) {}
 }
-
 function loadModelSync(id) {
   Streaming.RequestModel(id);
   Streaming.LoadAllModelsNow();
   return Streaming.HasModelLoaded(id);
 }
-
 function spawnCarAt(modelId, x, y, z) {
   if (!loadModelSync(modelId)) return null;
   const car = Car.Create(modelId, x, y, z);
@@ -529,10 +422,6 @@ function spawnCarAt(modelId, x, y, z) {
   Streaming.MarkModelAsNoLongerNeeded(modelId);
   return car || null;
 }
-
-// ════════════════════════════════════════════════════════════════
-//  MENU  — commute's showNativeMenu pattern
-// ════════════════════════════════════════════════════════════════
 function drainKeys() {
   while (
     Pad.IsKeyPressed(VK_UP)    || Pad.IsKeyPressed(VK_KEY_W) || Pad.IsKeyPressed(VK_NUM8) ||
@@ -543,7 +432,6 @@ function drainKeys() {
     Pad.IsKeyPressed(VK_ESC)   || Pad.IsKeyPressed(VK_F6)    || Pad.IsKeyPressed(VK_F7)
   ) wait(0);
 }
-
 function checkCheatCodes(player, char) {
   try {
     if (typeof Pad !== 'undefined' && typeof Pad.TestCheat === 'function') {
@@ -555,7 +443,6 @@ function checkCheatCodes(player, char) {
         const spX = pp.x - Math.sin(rad) * 6.0;
         const spY = pp.y + Math.cos(rad) * 6.0;
         const spZ = pp.z;
-
         const nc = spawnCarAt(443, spX, spY, spZ);
         if (nc) {
           try { nc.setHeading(hdg); } catch(e) {}
@@ -566,42 +453,31 @@ function checkCheatCodes(player, char) {
     }
   } catch(e) {}
 }
-
 function renderParkedMenu(entries, sel) {
   const total = entries ? entries.length : 0;
   if (total === 0) {
     showTextBox("~y~PARKED VEHICLES GARAGE~n~~r~No saved vehicles in storage.~n~~w~Press F6 to exit.");
     return;
   }
-
   const pageSize   = 5;
   const totalPages = Math.ceil(total / pageSize);
   const curPage    = Math.floor(sel / pageSize) + 1;
   const startPage  = Math.floor(sel / pageSize) * pageSize;
   const endPage    = Math.min(startPage + pageSize, total);
-
-  // 1. HEADER TITLE
   let txt = "~y~PARKED GARAGE~n~";
-
-  // 2. VEHICLE LIST ROWS
   for (let i = startPage; i < endPage; i++) {
     const d    = parseEntry(entries[i]);
     let name   = d ? (d.name || getVehicleName(d.modelId)) : ("" + (d ? d.modelId : ""));
     if (typeof name === 'string' && name.indexOf("Model ") === 0) name = name.substring(6);
-
     if (i === sel) {
       txt += "~g~> " + (i + 1) + ". " + name + "~n~";
     } else {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-
-  // 3. FOOTER CONTROL HINTS (Numpad 8, 2, 4, 6)
   txt += "~w~8/2=Move & Teleport  4/6=Page  F6=Exit";
-
   showTextBox(txt);
 }
-
 function purgeDestroyedEntries() {
   try {
     const entries = readDisk();
@@ -631,27 +507,20 @@ function purgeDestroyedEntries() {
     return cache || [];
   }
 }
-
 function runMenu(player, char) {
   cache = purgeDestroyedEntries();
   const entries = cache;
-
   drainKeys();
-
   let sel    = 0;
   let upD    = false, downD  = false;
   let leftD  = false, rightD = false;
   let enterD = false, f6D = true;
-
   renderParkedMenu(entries, sel);
-
   while (true) {
     wait(0);
-
     if (char.isInAnyCar() || player.isDead()) {
       break;
     }
-
     const total = entries ? entries.length : 0;
     if (total === 0) {
       const f6N = Pad.IsKeyPressed(VK_F6);
@@ -659,20 +528,15 @@ function runMenu(player, char) {
       f6D = f6N;
       continue;
     }
-
     const pageSize = 5;
-
     const upN    = Pad.IsKeyPressed(VK_NUM8);
     const downN  = Pad.IsKeyPressed(VK_NUM2);
     const leftN  = Pad.IsKeyPressed(VK_NUM4);
     const rightN = Pad.IsKeyPressed(VK_NUM6);
     const enterN = Pad.IsKeyPressed(VK_NUM5);
     const f6N    = Pad.IsKeyPressed(VK_F6);
-
     if (f6N && !f6D) break;
-
     let changed = false;
-
     if (upN && !upD) {
       sel = (sel - 1 + total) % total;
       changed = true;
@@ -689,17 +553,14 @@ function runMenu(player, char) {
       sel = Math.min(total - 1, sel + pageSize);
       changed = true;
     }
-
     if (changed) {
       teleportTo(entries[sel], char, true);
       renderParkedMenu(entries, sel);
     }
-
     if (enterN && !enterD) {
       teleportTo(entries[sel], char, true);
       renderParkedMenu(entries, sel);
     }
-
     upD    = upN;
     downD  = downN;
     leftD  = leftN;
@@ -707,12 +568,10 @@ function runMenu(player, char) {
     enterD = enterN;
     f6D    = f6N;
   }
-
   clearMenuBox();
   drainKeys();
   f6WasDown = true;
 }
-
 function clearMenuBox() {
   try {
     if (typeof Text !== 'undefined' && typeof Text.ClearHelp === 'function') {
@@ -722,30 +581,25 @@ function clearMenuBox() {
     }
   } catch(e) {}
 }
-
 function getTeleportOffset(mid) {
   if (isBoatModel(mid)) return { dist: 0.0, zOffset: 1.5 };
   if (isBikeModel(mid)) return { dist: 1.5, zOffset: 0.3 };
   if (isAircraftModel(mid)) return { dist: 5.0, zOffset: 0.3 };
   return { dist: 2.3, zOffset: 0.3 };
 }
-
 function setCharCoordinates(char, x, y, z) {
   if (!char) return;
   try { if (typeof char.setCoordinates === 'function') { char.setCoordinates(x, y, z); return; } } catch(e) {}
   try { if (typeof Char !== 'undefined' && typeof Char.SetCoordinates === 'function') { Char.SetCoordinates(char, x, y, z); return; } } catch(e) {}
 }
-
 function setCharHeading(char, hdg) {
   try { if (typeof char.setHeading === 'function') { char.setHeading(hdg); return; } } catch(e) {}
   try { if (typeof Char !== 'undefined' && typeof Char.SetHeading === 'function') { Char.SetHeading(char, hdg); return; } } catch(e) {}
 }
-
 function teleportTo(line, char, silent) {
   try {
     const d = parseEntry(line);
     if (!d) return;
-
     const key = getUniqueKey(d);
     if (streamed.hasOwnProperty(key)) {
       const h = streamed[key];
@@ -762,25 +616,19 @@ function teleportTo(line, char, silent) {
         return;
       }
     }
-
     const cfg = getTeleportOffset(d.modelId);
     const heading = d.heading || 0;
-    
-    // Offset onto the DRIVER DOOR (left) side of the vehicle based on cardinal heading
     const rad = (heading + 90) * Math.PI / 180;
     const tpX = d.x - Math.sin(rad) * cfg.dist;
     const tpY = d.y + Math.cos(rad) * cfg.dist;
     const tpZ = d.z + cfg.zOffset;
-
     setCharCoordinates(char, tpX, tpY, tpZ);
     setCharHeading(char, heading - 90);
-
     try {
       if (typeof Camera !== 'undefined' && typeof Camera.SetBehindPlayer === 'function') {
         Camera.SetBehindPlayer();
       }
     } catch(e) {}
-
     const name = getVehicleName(d.modelId);
     const coords = d.x.toFixed(0) + "," + d.y.toFixed(0);
     log("LOGGER: teleported to " + name + " at " + coords + " (Health: " + (d.health || 1000) + " HP)");
@@ -792,71 +640,52 @@ function teleportTo(line, char, silent) {
     log("LOGGER: teleportTo error: " + (e.stack || e));
   }
 }
-
 function getUniqueKey(d) {
   if (!d) return "";
   return d.modelId + "_" + d.x.toFixed(2) + "_" + d.y.toFixed(2) + "_" + d.z.toFixed(2);
 }
-
-
-
-// ════════════════════════════════════════════════════════════════
-//  STREAMER
-// ════════════════════════════════════════════════════════════════
 function runStreamer(char) {
   try {
     const pp      = char.getCoordinates();
     if (!pp) return;
     const entries = cache;
     if (!entries || !entries.length) return;
-
     let playerCar = null;
     try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
-
     const inSq  = CFG.streamIn  * CFG.streamIn;
     const outSq = CFG.streamOut * CFG.streamOut;
-
     for (let i = entries.length - 1; i >= 0; i--) {
       const line = entries[i];
       const d    = parseEntry(line);
       if (!d) continue;
-
       const key = getUniqueKey(d);
       const dx  = pp.x - d.x, dy = pp.y - d.y, dz = pp.z - d.z;
       const sq  = dx*dx + dy*dy + dz*dz;
       const h   = streamed[key];
-
       if (sq <= inSq) {
         if (streamed.hasOwnProperty(key)) {
           if (playerCar && h === playerCar) {
-            // Player is inside this vehicle! Do NOT process destruction or delete handle!
             continue;
           }
-          // If the spawned vehicle was destroyed / exploded
           if (!isCarValid(h) || isCarDestroyed(h)) {
             const name = getVehicleName(d.modelId);
             log("LOGGER: Parked vehicle " + name + " at " + d.x.toFixed(0) + "," + d.y.toFixed(0) + " was destroyed! Removed from list.");
             if (CFG.tooltips) showTextBox("~r~Parked ~y~" + name + " ~r~was destroyed! Entry removed.");
-
             delete streamed[key];
             entries.splice(i, 1);
             cache = entries;
             writeDisk(cache);
             continue;
           }
-
-          // If stationary/stopped after being hit or moved, update stored position & damage
           const rawSpd = getCarSpd(h);
           const speed  = (isNaN(rawSpd) || rawSpd < 0) ? 0 : rawSpd;
           if (speed < 0.05) {
             updateParkedCarStateIfNeeded(h, d, i, entries);
           }
         } else {
-          // If player is driving right through this exact spot (< 6m), defer spawn to prevent collision mesh rebuild crush
           if (playerCar && sq < 36.0) {
             continue;
           }
-
           clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
@@ -904,7 +733,6 @@ function runStreamer(char) {
               }
             }
           } catch(e) {}
-
           if (!isPlayerActiveCar && isCarValid(h)) {
             updateParkedCarStateIfNeeded(h, d, i, entries);
             deleteCarHandle(h);
@@ -919,32 +747,26 @@ function runStreamer(char) {
     log("LOGGER: streamer error: " + (e.stack || e));
   }
 }
-
 function updateParkedCarStateIfNeeded(h, d, i, entries) {
   try {
     if (!isCarValid(h) || isCarDestroyed(h)) return false;
     const oldKey = getUniqueKey(d);
     const spawnT = spawnTimeMap[oldKey] || 0;
-    // 4-second grace period after spawn for physics & collision settlement (e.g. Packer ramps, trailers)
     if (Date.now() - spawnT < 4000) return false;
-
     const cp = getCarPos(h);
     const hdg = getCarHdg(h);
     const mDx = cp.x - d.x, mDy = cp.y - d.y, mDz = cp.z - d.z;
     const mDistSq = mDx*mDx + mDy*mDy + mDz*mDz;
     const mHdgDiff = Math.abs(hdg - d.heading);
-
     if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
       const hp     = getCarHealth(h);
       if (hp <= 250) return false;
-
       const clrs   = getCarColors(h);
       const extraC = getCarExtraColors(h);
       const mods   = getCarMods(h, d.modelId);
       const tires  = getCarPoppedTires(h);
       const pj     = getCarPaintjob(h);
       const dam    = getCarDamage(h);
-
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
@@ -954,24 +776,20 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
         panels: dam.panels, doors: dam.doors,
         upgrades: mods
       });
-
       const oldKey = getUniqueKey(d);
       entries[i] = newLine;
       cache = entries;
       writeDisk(cache);
-
       if (oldKey && streamed.hasOwnProperty(oldKey)) {
         delete streamed[oldKey];
         delete spawnTimeMap[oldKey];
       }
-
       const newD = parseEntry(newLine);
       const newKey = getUniqueKey(newD);
       if (newKey) {
         streamed[newKey] = h;
         spawnTimeMap[newKey] = Date.now();
       }
-
       log("LOGGER: Updated position for moved parked " + getVehicleName(d.modelId) + " to " + cp.x.toFixed(1) + "," + cp.y.toFixed(1));
       return true;
     }
@@ -980,7 +798,6 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
   }
   return false;
 }
-
 function clearNearbyNonTracked(x, y, z, r, playerCar) {
   try {
     let next = false;
@@ -991,34 +808,26 @@ function clearNearbyNonTracked(x, y, z, r, playerCar) {
       if (!valid) break;
       if (playerCar && c === playerCar) { next = true; continue; }
       if (lastCarHandle && c === lastCarHandle) { next = true; continue; }
-
       let isTracked = false;
       for (const k in streamed) {
         if (streamed[k] && streamed[k] === c) { isTracked = true; break; }
       }
       if (isTracked) { next = true; continue; }
-
       deleteCarHandle(c);
       next = true;
     }
   } catch(e) {}
 }
-
-// ════════════════════════════════════════════════════════════════
-//  CLAIM CAR
-// ════════════════════════════════════════════════════════════════
 function tryClaimCar(car, char) {
   try {
     let sitting = false;
     try { if (typeof char.isSittingInCar === 'function') sitting = char.isSittingInCar(car); } catch(e) {}
     try { if (!sitting && typeof Char !== 'undefined' && typeof Char.IsSittingInCar === 'function') sitting = Char.IsSittingInCar(char, car); } catch(e) {}
     if (!sitting) return;
-
     const mid  = getCarModelId(car);
     const cp   = getCarPos(car);
     const ents = cache;
     if (!ents || !ents.length) return;
-
     let bestIdx = -1, bestDist = 1e9;
     for (let i = 0; i < ents.length; i++) {
       const d = parseEntry(ents[i]);
@@ -1043,24 +852,17 @@ function tryClaimCar(car, char) {
     log("LOGGER: claim error: " + (e.stack || e));
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  PENDING EXIT QUEUE
-// ════════════════════════════════════════════════════════════════
 function runPending(char) {
   if (!pending.length) return;
   const now = Date.now();
-
   const player = new Player(0);
   if (player.isDead()) {
     log("LOGGER: Player is dead — clearing pending exit queue.");
     pending = [];
     return;
   }
-
   let playerCar = null;
   try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
-
   for (let i = pending.length - 1; i >= 0; i--) {
     const item = pending[i];
     const c    = item.car;
@@ -1074,10 +876,8 @@ function runPending(char) {
       const mid = getCarModelId(c);
       if (mid <= 0) { pending.splice(i, 1); continue; }
       if (playerCar && (c === playerCar || (typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)))) { pending.splice(i, 1); continue; }
-
       const rawSpd = getCarSpd(c);
       const speed  = (isNaN(rawSpd) || rawSpd < 0) ? 0 : rawSpd;
-
       if (speed < 0.05) {
         saveCarExit(c);
         pending.splice(i, 1);
@@ -1088,10 +888,6 @@ function runPending(char) {
     }
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  SAVE CAR EXIT
-// ════════════════════════════════════════════════════════════════
 function formatMinifiedEntry(d) {
   if (!d) return "";
   const clrStr = (d.extraColor1 >= 0 && d.extraColor2 >= 0)
@@ -1102,7 +898,6 @@ function formatMinifiedEntry(d) {
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
-
   return d.modelId + "|" +
          d.x.toFixed(2) + "," + d.y.toFixed(2) + "," + d.z.toFixed(2) + "|" +
          d.heading.toFixed(1) + "|" +
@@ -1114,7 +909,6 @@ function formatMinifiedEntry(d) {
          ddStr + "|" +
          uStr;
 }
-
 function saveCarExit(car) {
   try {
     const player = new Player(0);
@@ -1130,7 +924,6 @@ function saveCarExit(car) {
     }
     const mid = getCarModelId(car);
     if (mid <= 0) return;
-
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
     const clrs   = getCarColors(car);
@@ -1140,7 +933,6 @@ function saveCarExit(car) {
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
-
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
@@ -1150,34 +942,25 @@ function saveCarExit(car) {
       panels: dam.panels, doors: dam.doors,
       upgrades: mods
     });
-
     const ents = readDisk();
     ents.push(line);
     while (ents.length > CFG.maxEntries) ents.shift();
     writeDisk(ents);
     cache = ents;
-
     const d   = parseEntry(line);
     const key = getUniqueKey(d);
     if (key) streamed[key] = car;
-
     log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " | Health: " + hp + " HP (" + line + ")");
     if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  PARSE ENTRY
-// ════════════════════════════════════════════════════════════════
 function parseEntry(line) {
   if (!line || typeof line !== 'string') return null;
   const s = line.trim();
   if (!s || s.indexOf("[") === 0 || s.indexOf(";") === 0 || s.indexOf("#") === 0) return null;
-
   try {
-    // 1. Ultra-Minified Positional Format: mid|x,y,z|hdg|c1,c2,c3,c4|pj|hp|tires|panels|doors|mods
     if (s.indexOf("|") !== -1 && s.indexOf("M:") === -1 && s.indexOf("Model:") === -1) {
       const parts = s.split("|");
       if (parts.length >= 3) {
@@ -1186,7 +969,6 @@ function parseEntry(line) {
         const cParts = parts[1].split(",");
         if (cParts.length < 3) return null;
         const x = parseFloat(cParts[0]), y = parseFloat(cParts[1]), z = parseFloat(cParts[2]);
-
         const hdg = parts[2] ? parseFloat(parts[2]) : 0;
         const clrParts = parts[3] ? parts[3].split(",") : [];
         const c1 = clrParts[0] !== undefined ? parseInt(clrParts[0], 10) : 0;
@@ -1195,7 +977,6 @@ function parseEntry(line) {
         const c4 = (clrParts.length >= 4 && clrParts[3] !== undefined) ? parseInt(clrParts[3], 10) : -1;
         const pj = parts[4] ? parseInt(parts[4], 10) : -1;
         const hp = parts[5] ? parseInt(parts[5], 10) : 1000;
-
         const tires = [];
         if (parts[6]) {
           for (const p of parts[6].split(",")) {
@@ -1203,7 +984,6 @@ function parseEntry(line) {
             if (n >= 0 && n <= 5) tires.push(n);
           }
         }
-
         const panels = [];
         if (parts[7]) {
           for (const p of parts[7].split(",")) {
@@ -1211,7 +991,6 @@ function parseEntry(line) {
             if (n >= 0 && n <= 6) panels.push(n);
           }
         }
-
         const doors = [];
         if (parts[8]) {
           for (const p of parts[8].split(",")) {
@@ -1219,9 +998,7 @@ function parseEntry(line) {
             if (n >= 0 && n <= 5) doors.push(n);
           }
         }
-
         const upgradesPart = parts[9] || parts[10] || "";
-
         const upgrades = [];
         if (upgradesPart) {
           for (const p of upgradesPart.split(",")) {
@@ -1229,7 +1006,6 @@ function parseEntry(line) {
             if (n >= 1000 && n <= 1193) upgrades.push(n);
           }
         }
-
         return {
           modelId: mid,
           name: getVehicleName(mid),
@@ -1249,8 +1025,6 @@ function parseEntry(line) {
         };
       }
     }
-
-    // 2. Legacy Key-Value Tag Format (M:mid|...)
     const mM   = s.match(/(?:Model:|M:)(\d+)/);
     const cM   = s.match(/(?:Coords:|C:)(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/);
     if (!mM || !cM) return null;
@@ -1296,7 +1070,6 @@ function parseEntry(line) {
     const x   = parseFloat(cM[1]);
     const y   = parseFloat(cM[2]);
     const z   = parseFloat(cM[3]);
-
     return {
       modelId:        mid,
       name:           (nM && nM[1].trim()) ? nM[1].trim() : getVehicleName(mid),
@@ -1313,16 +1086,12 @@ function parseEntry(line) {
       tires:          tires,
       panels:         panels,
       doors:          doors,
-      varA:           -1,  // legacy format: no extras stored
+      varA:           -1,
       varB:           -1,
       upgrades:       upgrades,
     };
   } catch(e) { return null; }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  DISK I/O
-// ════════════════════════════════════════════════════════════════
 function readDisk() {
   const lines = [];
   try {
@@ -1336,7 +1105,6 @@ function readDisk() {
   }
   return lines;
 }
-
 function writeDisk(lines) {
   try {
     const clean = lines.filter(l => l && l.trim().length > 0 && l !== "NotFound");
@@ -1345,7 +1113,6 @@ function writeDisk(lines) {
     for (let i = 0; i < clean.length; i++) {
       IniFile.WriteString(clean[i], PARKED_PATH, "Vehicles", "Entry" + i);
     }
-    // Clear stale slots
     for (let i = clean.length; i < clean.length + 5; i++) {
       IniFile.WriteString("NotFound", PARKED_PATH, "Vehicles", "Entry" + i);
     }
@@ -1354,10 +1121,6 @@ function writeDisk(lines) {
     log("LOGGER: writeDisk error: " + (e.stack || e));
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  CONFIG LOADER
-// ════════════════════════════════════════════════════════════════
 function loadConfig() {
   try {
     const r = IniFile.ReadFloat(CONFIG_PATH, "Settings", "StreamInRadius");
@@ -1378,10 +1141,6 @@ function loadConfig() {
     log("LOGGER: loadConfig error: " + (e.stack || e));
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  CAR MODS READER
-// ════════════════════════════════════════════════════════════════
 function getCarMods(car, modelId) {
   const mods = [];
   if (!isTunableVehicle(modelId)) return mods;
@@ -1396,10 +1155,6 @@ function getCarMods(car, modelId) {
   }
   return mods;
 }
-
-// ════════════════════════════════════════════════════════════════
-//  GAME START MEMORY SYNC
-// ════════════════════════════════════════════════════════════════
 function gatherAndUpdateAllOnStart() {
   try {
     const lines = readDisk();
@@ -1409,17 +1164,14 @@ function gatherAndUpdateAllOnStart() {
     }
     let modified = false;
     const updated = [];
-
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const d = parseEntry(line);
       if (!d) continue;
-
       const newLine = formatMinifiedEntry(d);
       if (newLine !== line) modified = true;
       updated.push(newLine);
     }
-
     if (modified) {
       writeDisk(updated);
       cache = updated;
@@ -1433,26 +1185,16 @@ function gatherAndUpdateAllOnStart() {
     log("LOGGER: gatherAndUpdateAllOnStart error: " + (e.stack || e));
   }
 }
-
-// ════════════════════════════════════════════════════════════════
-//  BOOT
-// ════════════════════════════════════════════════════════════════
 log("LOGGER: starting");
 loadConfig();
 gatherAndUpdateAllOnStart();
 log("LOGGER: initialized with " + cache.length + " parked entries");
 wait(500);
 showTextBox("~y~Car Exit Logger~n~~w~F6=menu  F7=reload INI");
-
-// ════════════════════════════════════════════════════════════════
-//  MAIN LOOP
-// ════════════════════════════════════════════════════════════════
 while (true) {
   wait(0);
-
   const player = new Player(0);
   const char   = player.getChar();
-
   if (player.isDead()) {
     if (wasInCar || lastCarHandle || pending.length > 0) {
       log("LOGGER: Player died — clearing vehicle state and pending exit queue.");
@@ -1462,8 +1204,6 @@ while (true) {
     }
     continue;
   }
-
-  // ── F7: reload INI + re-stream ────────────────────────────────
   const f7Now = Pad.IsKeyPressed(VK_F7);
   if (f7Now && !f7WasDown) {
     f7WasDown = true;
@@ -1483,27 +1223,21 @@ while (true) {
   } else if (!f7Now) {
     f7WasDown = false;
   }
-
-  // ── F6: open menu (blocking sub-loop, main loop suspends) ─────
   const f6Now         = Pad.IsKeyPressed(VK_F6);
   const f6JustPressed = f6Now && !f6WasDown;
   f6WasDown           = f6Now;
-
   if (f6JustPressed) {
     if (char.isInAnyCar()) {
       showTextBox("~r~Cannot open menu in a vehicle!~n~~w~Get out on foot first.");
       log("LOGGER: Menu open blocked — player is in a vehicle");
     } else {
-      runMenu(player, char);           // blocks until closed
-      drainKeys();                     // prevent key bleed after return
-      f6WasDown = false;               // ensure next F6 press opens on first click
+      runMenu(player, char);
+      drainKeys();
+      f6WasDown = false;
     }
     continue;
   }
-
-  // ── EXIT LOGGER: detect car entry/exit ───────────────────────
   const inCar = char.isInAnyCar();
-
   checkCheatCodes(player, char);
   if (inCar) {
     if (!wasInCar) {
@@ -1515,7 +1249,7 @@ while (true) {
         if (car && isCarValid(car) && mid > 0) {
           lastCarHandle = car;
           log("LOGGER: Entered vehicle model " + mid);
-          probeAndCacheTunability(car, mid);  // safe probe in wait(0) frame
+          probeAndCacheTunability(car, mid);
           tryClaimCar(car, char);
         }
       } catch(e) {
@@ -1547,7 +1281,6 @@ while (true) {
       lastCarHandle = null;
     }
   }
-
   runPending(char);
   runStreamer(char);
 }

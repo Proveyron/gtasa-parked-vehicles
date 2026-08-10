@@ -1,0 +1,34 @@
+#PCJ Playground#
+PCJCHT PCJ Playground
+PCJH01 You have ~1~ seconds to collect ~y~20~w~ checkpoints.
+PCJH02 ~y~PASS THROUGH~w~ the first checkpoint within in time limit.
+PCJCKH ~1~ of 20!
+
+#RC Raider Pickup#
+RCPTLT RC Raider Pickup
+RCHPST Checkpoints Left
+RCPH01 Use the RC Helicopter to collect many checkpoints scattered throughout the airport possible in the time limit
+RCPH02 There are ~1~ Checkpoints in total
+RCPH03 If you wish to quit this mission press ~k~~VEHICLE_ENTER_EXIT~ or Enter to Detonate Vehicle
+RCSCRH You got checkpoint is: ~1~
+RCPLSR ~r~You have left the RC Raider Pickup!
+RCPLSE ~r~Try again Later!
+
+#Shooting Range#
+VCSHRG Shooting Range
+BJM_FR FIRE!
+BJM2_2 To exit the area Hold press ENTER button
+BNK2_3 Time's up!
+BJM2_15 SCORE
+BJM2_18 SCORE TO BEAT
+BJM2_19 Hit as many targets as you can in the time limit!
+BJM2_20 When you run out of time or ammunition the round is over!
+BJM2_22 ~r~You have left the shooting range!
+BJM2_23 If you leave the shooting range during the competition, you will fail the mission.
+BJM_SCR You Result score is: ~1~
+BJM_SRA You score is: ~1~
+BJM_LSE ~r~Try again Later!
+
+#Good Citizen Bonus Features#
+GD_CTZN $~1~ Good Citizen Bonus!
+BD_CTZN Bad Citizen!

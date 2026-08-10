@@ -1,0 +1,58 @@
+#RC Top Fun Toyz#
+LCRB1 RC Toyz: Diablo Destruction
+LCRB2 RC Toyz: Mafia Massacre
+LCRB3 RC Toyz: Casino Calamity
+LCRB4 RC Toyz: Rumpo Rampage
+LCBH1 You have 2 minutes to blow up as many Diablo Gang Cars as possible!
+LCBH2 You have 2 minutes to blow up as many Mafia Gang Cars as possible!
+LCBH3 You have 2 minutes to blow up as many Yakuza Gang Cars as possible!
+LCBH4 You have 2 minutes to blow up as many Hood Gang Cars as possible!
+LCBBM Hold Press ~k~~VEHICLE_FIREWEAPON~ or Left Click Mouse to Detonate Vehicle
+LCRSCR Your Result Score is: ~1~
+LCBLSE Try Again Later!
+
+#Slash TV#
+LCSTLT Slash TV
+LCHT1 Kill all the deranged psychopaths... they just keep on coming!
+LCHT2 Each level gets harder with more enemies to dispatch and for get rewards to be won!
+LCTVEL Enemy Spawn Left
+LCTLV1 Level 1
+LCTLV2 Level 2
+LCTLV3 Level 3
+LCTLV4 Level 4
+LCTLV5 Final Level 5
+LCTRD0 Prepare to Battle!
+LCTRD1 READY...
+LCTRD2 SET...
+LCTRD3 GO!
+LCTCLR Level Clear!
+
+#Ferry Boat Transport# 
+FRTH01 Ferry to Portland, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH02 Ferry to Staunton, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH03 Ferry to Santa Perraloca, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH04 Ferry to Los Santos, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH05 Ferry to Gatork, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH06 Ferry to Cottonmouth, Cost: $800, Hold Press ~k~~PED_SPRINT~ to buy a ticket
+FRTH07 Wait sometime until a both ferry is docked ready to transport.
+FRTH08 You need $800 for a ferry ticket, Come back when you have enough money!
+FRTH09 Wanted criminals are not allowed on the ferry!
+FRTH10 You can't use a ferry whilst on a mission
+FRTH11 Your vehicle won't fit on the ferry!
+FRTH12 Hold Press ~k~~PED_SPRINT~ to skip to the end of the Ferry
+
+#LC 9mm Mayhem
+LCBKM 9mm Mayhem
+LCBKR1 Eliminate ~r~Target ~w~as many vehicles as possible
+LCBKS1 Time's up!
+LCBSCR Your Result Score is: ~1~
+LCBSWH You can switchable with Hold Press E to switch as Driveable and Passenger shooter while chasing targets
+LCBSTG Hold Press E to Switch as Driver/Passenger Shooter if need
+
+#LC Scooter Shooter
+LCSHM Scooter Shooter
+LCSHR1 Eliminate ~r~Target ~w~as many vehicles as possible
+LCSHS1 Time's up!
+LCSHCR Your Result Score is: ~1~
+LCSHWH You can switchable with Hold Press E to switch as Driveable and Passenger shooter while chasing targets
+LCSHTG Hold Press E to Switch as Driver/Passenger Shooter if need

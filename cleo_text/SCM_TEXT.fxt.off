@@ -1,0 +1,246 @@
+####SCM TEXT####
+
+## Vehicles Craft ## - Buggy, Neighbourhood, Monster Drive, Cementery
+BGCRH1 Use the that vehicle to collect many checkpoints scattered throughout the grounds as possible in the time limit
+BGCRH2 There are ~1~ Checkpoints in total.
+BGCRH3 If you wish to quit this mission press ~k~~VEHICLE_ENTER_EXIT~
+BGCRL1 ~r~Time has run out!
+BGCRL2 ~r~Try Again later!
+BGCRL3 ~r~You have left the that vehicle!
+
+## Sky Slalom ##
+DFCRH1 Use the that plane to collect many checkpoints scattered throughout the grounds as possible in the time limit
+DFCRL3 ~r~You have left the that plane!
+
+## Squad Storms ##
+SQSTM1 Opponent Group has doing plan to invaded the cities and trying destroy the ally helicopter
+SQSTM2 Your objective task Eliminate the opponent group and protect the cities and ally helicopter
+SQSTM3 You have a bodyguard and some has time limit before time runs out
+SQSTM4 Go into ~y~Target Location ~w~with your speed
+SQSTM5 Eliminate ~r~All Opponent Group ~w~and protect the ~b~ally helicopter ~w~and your car within time limit!
+SQSTM6 Good Job! return into apartement office to take reward!
+SQSSTS Enemy Left
+SQSSTH Ally Heli Health
+
+## Big Canyon Railway Ticket ##
+RLCBW01 1x Play $500
+RLCBW02 2x Play $1000
+RLCBW03 3x Play $1500
+RLCBW04 Go ahead inside the ~y~target ~w~place.
+RLCBW05 You don't have enough money to buy this ticket.
+
+## Mall Security ##
+MLVHL01 You've got the job as a security guard at the mall
+MLVHL02 The task is protect the stuff as much as possible until time runs out
+MLVHL03 To quit security task press ~k~~VEHICLE_ENTER_EXIT~ to exit when not touch the stuff
+MLVHL04 ~r~The Robbery ~w~has stolen the stuff take him hit!
+MLVHL05 Bring the stuff back into the ~y~store
+MLVHL06 ~r~You let the Robbery leaving with the stuff, you're fired!
+MLVHL07 Good Job! you protected the stuff inside the mall store area.
+MLVHL08 Reward $~1~
+MLVHL09 ~r~You're leaving the security guard job at the mall!
+MLVHL10 The robbery dropped the stuff!
+MLVHL11 Press ENTER to Pick up
+
+##PE Ammunation##
+PWSL01 Pistol 1
+PWSL02 Pistol 2
+PWSL03 Shotgun 1
+PWSL04 Shotgun 2
+PWSL05 Micro SMG 1
+PWSL06 Micro SMG 2
+PWSL07 SMG 1
+PWSL08 SMG 2
+PWSL09 Assault 1
+PWSL10 Assault 2
+PWSL11 Sniper 1
+PWSL12 Sniper 2
+PWSL13 Rocket
+PWSL14 Flame
+PWSL15 M249
+PWSL16 Minigun
+PWSL17 Grenade
+PWSL18 Molotov
+PWSL19 Armour
+
+PWSW01 VC Colt45
+PWSW02 VC Python
+PWSW03 VC Chromegun
+PWSW04 VC Shotgspa
+PWSW05 VC Uzi
+PWSW06 VC Ingram
+PWSW07 VC Ruger
+PWSW08 VC M4
+PWSW09 VC Sniper
+PWSW10 VC Laser
+PWSW11 VC Tec9
+PWSW12 VC Mp5lng
+PWSW13 VC M60
+PWSW14 VC Grenade
+PWSW15 VC Molotov
+
+PWSW16 Colt45
+PWSW17 Desert Eagle
+PWSW18 Shotgun
+PWSW19 Shotgspa
+PWSW20 Micro Uzi
+PWSW21 Mp5lng
+PWSW22 Ak47
+PWSW23 M4
+PWSW24 Cuntgun
+PWSW25 Sniper
+PWSW26 Tec9
+PWSW27 LCS Mp5k
+PWSW28 Rocket Launcher
+PWSW29 Grenade
+PWSW30 Molotov
+
+PWSW31 LC Colt45
+PWSW32 LCS Python
+PWSW33 LC Shotgun
+PWSW34 LCS Shotgspa
+PWSW35 LC Uzi
+PWSW36 LS Ingramsl
+PWSW37 LC Ak47
+PWSW38 LC M16
+PWSW39 LC Sniper
+PWSW40 LCS Laser
+PWSW41 LCS Tec9
+PWSW42 LCS Mp5k
+PWSW43 LC Heatseek
+PWSW44 LC Grenade
+PWSW45 LC Molotov
+
+####More thing SCM TEXT####
+RMCRFT Cementery Craft
+NHBCFT Neighbourhood Craft
+MSDCFT Monster Drive Craft
+BGCRFT Buggy Craft
+DFCRFT Sky Slalom
+SQSTLT Squad Storms
+FGSRTL Fighting Scream
+TRKSDMG Damage
+VEHDMG Damage
+LDWLCM Loading...
+SHCTLT Shooting School
+SHDFTG Difficult Level
+SHCTGL Use ~k~~GO_FORWARD~ or ~k~~GO_BACK~ to select Shooting School. Press ~k~~PED_SPRINT~ to Start Action and Press ~k~~VEHICLE_ENTER_EXIT~ to Exit
+SHCS01 The Pistol Gun Scenario
+SHCS02 The SMG Gun Scenario
+SHCS03 The Assault Gun Scenario
+SHCS04 The Grenade Laucher Scenario
+SHCS05 The Future Weapon Scenario
+SHCDF1 Easy
+SHCDF2 Normal
+SHCDF3 Hard
+SHCDF4 Hardest
+SHCDF5 Inferno
+SHCTT1 Welcome into Shooting School! You are in Scenario Area.
+SHCTT2 There are lot enemies with many guns in area going to shooting.
+SHCTT3 Your objective task are Eliminate ~r~All Enemies ~w~with your weapons and show your strategy skill what do you have!
+SHCTT4 Congrats! you are completed clear all enemies in area!
+SCHPSD School Passed!
+SCHFLD ~r~SCHOOL FAILED!
+SCHPSS SCHOOL PASSED! ~n~~w~$~1~
+SCHTLS ~r~Try Again Later!
+SCHTLR ~r~You're Leaving in Shooting School!
+SCHTTS ~r~Time runs out, Try again later!
+SCRWD1 Congrats! you has passed Easy Level you got a reward Regen Health!
+SCRWD2 Congrats! you has passed Normal Level you got a reward Max Stamina!
+SCRWD3 Congrats! you has passed Hard Level you got a reward Max Muscular!
+SCRWD4 Congrats! you has passed Hardest Level you got a reward Grenade Launcher!
+SCRWD5 Congrats! you has passed Inferno Level you got a reward Future Weapon!
+SCRWD6 Congrats! you has passed All Level you got a Extra Reward a Upgraded!
+SDLRS $~1~
+FZPEFD1 Buster
+FZPEFD2 Double D-luxe
+FZPEFD3 Full Rack
+FZPEFD4 Salad Meal
+BSPEFD1 The Little Meal
+BSPEFD2 Beef Tower
+BSPEFD3 Meat Stack
+BSPEFD4 Salad Meal
+RLCTBW Big Canyon Railway Ticket
+MLVTLT Mall Security
+PHLBYS Press ~k~~CONVERSATION_YES~ to Buy weapons
+PHLCNT You don't have enough money to buy this weapons.
+PHWPRC Prices to buy this weapon $~1~
+BTNTGS Navigate with ~k~~GO_FORWARD~ and ~k~~GO_BACK~. ~n~Press ~k~~PED_SPRINT~ to select ~n~Press ~k~~VEHICLE_ENTER_EXIT~ to exit.
+
+LIMORQS You need have driving with Stretch Limo Car!
+LIMOTGL Hold Press ~k~~TOGGLE_SUBMISSIONS~ to start Limodriver Oddjob
+LMOR027 Good job! You reward a Limo near Cottonmouth Plaza..
+STAT413 Limodriver Oddjob Passed Level
+ICTGLE Icecream Mission can be toggled on or off by pressing ~k~~TOGGLE_SUBMISSIONS~
+TDTGLE Trash Dash missions can be toggled on or off by pressing ~k~~TOGGLE_SUBMISSIONS~
+INTRO20 Navigate with ~k~~GO_FORWARD~ and ~k~~GO_BACK~. Press ~k~~PED_SPRINT~ to select and ~k~~VEHICLE_ENTER_EXIT~ to exit.
+ETSH33 Navigate with ~k~~GO_LEFT~ and ~k~~GO_RIGHT~. Press ~k~~PED_SPRINT~ to select and ~k~~VEHICLE_ENTER_EXIT~ to exit. Note: Hireable workers changes every day passed.
+XWOR001 This is a ~r~restricted area! ~w~Leave this place.
+XWOR002 ~r~Neutralize the Threat!
+INTRO06 This option is locked
+CHINALC Chinatown
+ROSE100 All Rosebuds collected! Weapons delivered to this free safehouse! 
+BARMIG Miguel's 8Balls Bar
+SVSPLC Casa de Suenos
+CMHOT1 Welcome to The "Royal Park" . To save your vehicle(s) park your vehicle at the designated spot
+CMHOT2 The Majestic Hotel will provide security to your vehicles at the designated spot.
+CMHOT3 You can use the Majestic Hotel's Royal Park to store your vehicles.
+CMHOT4 Royal Park doesn't allow this type of vehicle.
+CMHOT5 This vehicle won't fit the Royal Park.
+HOTICM Royal Park
+HPREG01 Health Regen unlocked!  You'll be able to regenerate your health up to 50%.
+HPREG02 If you are in a crouch position and do not move, you will hold on to your wounds better.
+INTE001 Interaction Menu
+INTE002 Clothing & Accessories
+INTE003 Progression
+INTE004 Map & Blips
+INTE005 Hats
+INTE006 Glasses
+INTE007 Chains
+INTE008 Watch
+INTE009 Race Icons: < ~1~ >
+INTE010 Asset Icons: < ~1~ >
+INTE011 Oddjob Icons: < ~1~ >
+INTE012 Dealership Icons: < ~1~ >
+INTE013 Navigate with ~k~~GO_FORWARD~ and ~k~~GO_BACK~ keys. Press ~k~~PED_SPRINT~ to change and ~k~~VEHICLE_ENTER_EXIT~ to exit. 1 means ON, 0 means OFF
+INTE014 Vehicle Missions
+INTE015 Collectibles
+INTE016 Asset Missions
+INTE017 Various Oddjobs
+INTE018 Contract/Assassin Missions
+INTE019 Completion Percentage: ~1~%   
+INTE020 Rose City Contracts
+INTE021 Independence City Contracts
+INTE022 Cottonmouth Contracts
+INTE023 Los Santos Contracts
+INTE024 Liberty City Contracts
+INTE025 This section has no content!
+INTE026 DISCHARGED < ~1~ >
+INTE027 Quick Snatch < ~1~ >
+INTE028 Blueberry Blues < ~1~ >
+INTE029 Danger from Above < ~1~ >
+INTE030 Rolling... Cut! < ~1~ >
+INTE031 Judgement - As Seen on TV! < ~1~ >
+INTE032 VoltTruck Co. Missions < ~1~ >
+INTE033 Liberty City Trucking < ~1~ >
+INTE034 Trash Dash Portland < ~1~ >
+INTE035 Trash Dash Staunton < ~1~ >
+INTE036 Trash Dash Shoreside < ~1~ >
+INTE037 Liberty City Terrain4x4 < ~1~ >
+INTE038 Limo Driver < ~1~ >
+INTE039 Cherry Popper Icecream < ~1~ >
+INTE040 Doherty Garage < ~1~ >  
+PHPLACE Press ~k~~CONVERSATION_YES~ to purchase this weapon for $~1~ from Phil's Place
+PROP_5 This safehouse is given after collecting all Rosebuds.
+XIMP01 Delivered like Claude! Complete the List and There'll be a Bonus for you.
+XIMP02 Delivered like Tommy! Complete the List and There'll be a Bonus for you.
+XIMP03 You can export this vehicle to Warehouse over at Portland Harbor.
+XIMP04 You can export this vehicle over at Sunshine Autos.
+XIMP05 The Civil Asset Forfeiture Impound need one of these vehicles.
+XIMP06 Here's your collector fee: $~1~
+XIMP07 Leave the vehicle in the red marker.
+XIMP08 All the cars. NICE! Here's a little something.
+XIMP09 You can export this vehicle to Warehouse over at Pike Creek.
+M_TPS UNLOCK DISCOVERY! ~n~~w~$~1~
+PAC_AM Hidden Package are colleted!~n~~1~ of 100
+PAC_CO All Hidden Package are collected!

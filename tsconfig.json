@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "esnext",
+    "noEmit": true,
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "allowJs": true,
+    "checkJs": true,
+    "lib": ["ES2020"],
+    "types": []
+  },
+  "include": ["**/*.ts", "**/*.mts", ".config/*.d.ts"]
+}

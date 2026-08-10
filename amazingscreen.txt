@@ -1,0 +1,832 @@
+{$CLEO}
+{
+	Amazing Screenshot 1.2
+	Created by Silent
+
+	Credits:
+	- Deji - parts of CD source & Run Scripts on Frozen Game snippet
+}
+const       // Native constants required to compile this source
+	OFF				= 0
+	ON				= 1
+
+	PAD1			= 0
+
+	LEFTSTICKX = 0
+	LEFTSTICKY = 1
+	RIGHTSTICKX = 2
+	RIGHTSTICKY = 3
+	LEFTSHOULDER1 = 4
+	LEFTSHOULDER2 = 5
+	RIGHTSHOULDER1 = 6
+	RIGHTSHOULDER2 = 7
+	DPADUP = 8
+	DPADDOWN = 9
+	DPADLEFT = 10
+	DPADRIGHT = 11
+	START = 12
+	SELECT = 13
+	SQUARE = 14
+	TRIANGLE = 15
+	CROSS = 16
+	CIRCLE = 17
+	LEFTSHOCK = 18
+	RIGHTSHOCK = 19
+	HOME = 20
+
+	JUMP_CUT		= 2
+
+	VK_LBUTTON		= 0x01
+	VK_RBUTTON		= 0x02
+	VK_TAB			= 0x09
+	VK_SHIFT		= 0x10
+	VK_CONTROL		= 0x11
+	VK_MENU			= 0x12
+	VK_PRIOR		= 0x21
+	VK_NEXT			= 0x22
+	VK_P            = 0x50
+	VK_V			= 0x56
+	VK_F12			= 0x7B
+	VK_OEM_3		= 0xC0
+	VK_OEM_4        = 0xDB
+	VK_OEM_6        = 0xDD
+
+	TIMERA			= 32@
+	TIMERB			= 33@
+
+	// Keypress bits
+	KEY_TOGGLE      = 0
+	KEY_TAB         = 1
+	KEY_FREECAM     = 2
+	KEY_SCREENIE    = 3
+	KEY_RESETFOV    = 4
+
+	STD_CAMERA_ON   = 5
+	WIDESCREEN_STATE = 6
+
+	SAVED_CONTROL_STAT = 7
+
+	GINPUT_CAN_GUIDE   = 8
+	GINPUT_USES_PAD    = 9
+	GINPUT_INVERT_LOOK = 10
+
+	HELP_MASK_1        = 11
+	HELP_MASK_2        = 12
+	HELP_MASK_3        = 13
+
+
+	// GInput constants
+	GINPUT_EVENT_FETCH_GENERAL_SETTINGS    = 6
+	GINPUT_EVENT_FETCH_PAD_SETTINGS        = 7
+
+	GuideLaunchesOverlay   = 3
+	InvertLook             = 9
+end
+
+int 0@		// Bitmask
+int 1@		// Current message index
+int 2@      // GInput handle
+int 3@		// Saved Widescreen state (before Amazing Screenshot was enabled)
+float 4@	// Camera point X
+float 5@	// Camera point Y
+float 6@	// Camera point Z
+float 7@	// Left/Right control input value
+float 8@	// Up/Down control input value
+float 9@	// Y angle offset #1
+float 10@	// Y angle offset #2
+float 11@	// X angle offset
+float 12@	// Temp float #1
+float 13@	// Temp float #2
+float 14@	// Temp float #3
+float 15@	// Camera X angle
+float 16@	// Camera Y angle
+float 17@	// Sky mult
+int 19@     // CDraw::SetFOV pointer
+int 20@		// CCamera pointer; Temp int #1
+int 21@		// CCamera.m_WideScreenOn pointer
+float 22@	// Page Down/Page Up control input value
+int 23@		// CCamera.Cams[0].Alpha pointer
+int 24@		// CCamera.Cams[0].Beta pointer
+int 25@		// Saved vehicle camera pointer
+float 26@	// Initial .Beta value
+float 27@	// Current FOV
+int 28@		// Short message #1 pointer
+int 29@		// Long message #1 ('Welcome to Amazing Screenshot...' + message #1) pointer
+int 30@		// Message #2 pointer
+int 31@		// Temp variable
+
+0A8D: 20@ = read_memory 0x53BF8A size 2 virtual_protect 0
+if 20@ == 0x9066
+then
+	0A8C: write_memory 0x53BF8A size 2 value 0xC084 virtual_protect TRUE
+	0A8C: write_memory 0x53BF96 size 4 value 0x0298850F virtual_protect TRUE
+	0A8C: write_memory 0x60D850 size 4 value 0xF18B5756 virtual_protect TRUE
+	0A8C: write_memory 0x58FCC2 size 2 value 0xC084 virtual_protect TRUE
+	0A8C: write_memory 0x58FCFF size 1 value 0x6A virtual_protect TRUE
+	0A8C: write_memory 0x53BF9A size 2 value 0x0 virtual_protect TRUE
+	0A8C: write_memory 0x52C7F4 size 2 value 0x0DD8 virtual_protect TRUE
+	0A8C: write_memory 0x4AA440 size 4 value 0x5608EC83 virtual_protect TRUE
+	0A8C: write_memory 0x52C971 size 2 value 0x548B virtual_protect TRUE
+	0A8C: write_memory 0x561B06 size 1 value 0x00 virtual_protect TRUE
+
+	0A8D: 20@ = read_memory 0x714641 size 4 virtual_protect 0
+	0A8C: write_memory 0x714843 size 4 value 20@ virtual_protect TRUE
+	0A8C: write_memory 0x714860 size 4 value 20@ virtual_protect TRUE
+else
+	0A8D: 20@ = read_memory 0x714843 size 4 virtual_protect 0
+	0A8C: write_memory 0x714641 size 4 value 20@ virtual_protect TRUE
+
+	0A9F: 31@ = current_thread_pointer
+	31@ += 0x10
+	0A8D: 31@ = read_memory 31@ size 4 virtual_protect FALSE
+	31@ -= @SKY_MULT
+	0A8D: 20@ = read_memory 20@ size 4 virtual_protect 0
+	20@ *= 5.0
+	0A8C: write_memory 31@ size 4 value 20@ virtual_protect FALSE
+end
+
+// Load GInput
+0AB1: call_scm_func @GINPUT_LOAD 0 2@
+gosub @PROCESS_GINPUT
+
+0A8D: 19@ = read_memory 0x52C977 size 4 virtual_protect 0
+19@ += 0x52C97B
+
+0A8D: 20@ = read_memory 0x4054C7 size 4 virtual_protect FALSE
+0A8E: 21@ = 20@ + 0x3D
+0A8E: 23@ = 20@ + 0x220
+0A8E: 24@ = 23@ + 0x10
+
+while true
+	wait 0
+	gosub @PROCESS_GINPUT
+
+	if gosub @TOGGLE_KEYPRESS
+	then
+		00BE: text_clear_all
+		0581: enable_radar 0
+		0826: enable_hud 0
+		0A39: get_vehicle_camera_mode_to 25@
+		09AD: set_vehicle_camera_mode 3
+		015D: set_gamespeed 0
+		if 88B5:   not test 0@ bit HELP_MASK_1
+		then
+			0AA5: call 0x588BE0 num_params 4 pop 4 FALSE TRUE FALSE 29@
+			08BA: set 0@ bit HELP_MASK_1
+		end
+		0A8D: 3@ = read_memory 21@ size 1 virtual_protect FALSE
+		0A8C: write_memory 0x53BF8A size 2 value 0x9066 virtual_protect TRUE
+		0A8C: write_memory 0x53BF96 size 4 value 0x441F0F66 virtual_protect TRUE
+		0A8C: write_memory 0x53BF9A size 2 value 0x0000 virtual_protect TRUE
+		0A8C: write_memory 0x60D850 size 4 value 0x04C2 virtual_protect TRUE
+		0A8C: write_memory 0x58FCC2 size 2 value 0x36EB virtual_protect TRUE
+		0A8C: write_memory 0x58FCFF size 1 value 0xC3 virtual_protect TRUE
+		0A8C: write_memory 0x52C7F4 size 2 value 0x36EB virtual_protect TRUE
+		0A8C: write_memory 0x4AA440 size 4 value 0x900020C2 virtual_protect TRUE
+		0A8C: write_memory 0x52C971 size 2 value 0x0BEB virtual_protect TRUE
+		0A8C: write_memory 0x561B06 size 1 value 0x01 virtual_protect TRUE
+
+		0A9F: 31@ = current_thread_pointer
+		31@ += 0x10
+		0A8D: 31@ = read_memory 31@ size 4 virtual_protect FALSE
+		31@ -= @SKY_MULT
+	    0A8C: write_memory 0x714843 size 4 value 31@ virtual_protect TRUE
+		0A8C: write_memory 0x714860 size 4 value 31@ virtual_protect TRUE
+
+		0AA5: call 0x561AF0 num_params 0 pop 0
+		if 09E7:   player 0 not_frozen
+		then
+		    08BA: set 0@ bit SAVED_CONTROL_STAT
+		else
+		    08C3: clear 0@ bit SAVED_CONTROL_STAT
+		end
+		08BA: set 0@ bit KEY_TOGGLE
+		08C3: clear 0@ bit KEY_SCREENIE
+		1@ = 0
+
+		{17@ += 4
+		0A8D: 33@ = read_memory 17@ size 4 virtual_protect 0
+		33@ *= 4.0
+		17@ -= 4
+		0A8C: write_memory 17@ size 4 value 33@ virtual_protect FALSE}
+
+		08BA: set 0@ bit STD_CAMERA_ON
+		27@ = 70.0
+		TIMERB = 0
+
+		while true
+			wait 0
+			gosub @PROCESS_GINPUT
+			TIMERB += 1
+			if 88B5:   not test 0@ bit HELP_MASK_2
+			then
+				if TIMERB > 200
+				then
+					0AA5: call 0x588BE0 num_params 4 pop 4 FALSE TRUE FALSE 30@
+					08BA: set 0@ bit HELP_MASK_2
+				end
+			else
+				if 88B5:   not test 0@ bit HELP_MASK_3
+				then
+					if TIMERB > 350
+					then
+						08BA: set 0@ bit HELP_MASK_3
+						TIMERB = 0
+					end
+				else
+					if gosub @HELP_BUTTON
+					then
+					    if 0A0F:   needs_to_refresh_helps
+					    then
+					        03E6: remove_text_box
+					    end
+
+						if 88FE:   not text_box_displayed
+						then
+							TIMERB = 0
+							0AA5: call 0x588BE0 num_params 4 pop 4 FALSE TRUE FALSE 28@(1@,1i)
+						end
+						if TIMERB > 150
+						then
+							03E6: remove_text_box
+							if 1@ == 0
+							then
+								1@ = 2
+							else
+								1@ = 0
+							end
+						end
+					else
+						if 08FE:   text_box_displayed
+						then
+							1@ = 0
+							03E6: remove_text_box
+						end
+					end
+				end
+			end
+
+			if 88B5:   not test 0@ bit KEY_SCREENIE
+			then
+				if gosub @CAPTURE
+				then
+					08BA: set 0@ bit KEY_SCREENIE
+				end
+			else
+				if gosub @CAPTURE
+				then
+				else
+					0A1E: dump_screen 1
+					08C3: clear 0@ bit KEY_SCREENIE
+				end
+			end
+			if 88B5:   not test 0@ bit KEY_RESETFOV
+			then
+				if gosub @LESS_FOV
+				then
+					if 27@ > 10.0
+					then
+						27@ -= 0.5
+						0AA5: call 19@ num_params 1 pop 1 27@
+					end
+				end
+				if gosub @MORE_FOV
+				then
+					if 150.0 > 27@
+					then
+						27@ += 0.5
+						0AA5: call 19@ num_params 1 pop 1 27@
+					end
+				end
+				if gosub @RESET_FOV
+				then
+					08BA: set 0@ bit KEY_RESETFOV
+				end
+			else
+				if gosub @RESET_FOV_END
+				then
+					27@ = 70.0
+					0AA5: call 19@ num_params 1 pop 1 27@
+					08C3: clear 0@ bit KEY_RESETFOV
+				end
+			end
+			if 88B5:   not test 0@ bit KEY_TOGGLE
+			then
+				if gosub @TOGGLE_KEYPRESS
+				then
+
+					while gosub @TOGGLE_KEYPRESS
+						wait 0
+					end
+
+					03E6: remove_text_box
+					0581: enable_radar 1
+					0826: enable_hud 1
+					09AD: set_vehicle_camera_mode 25@
+					015D: set_gamespeed 1.0
+					02A3: enable_widescreen 3@
+					0A48: enable_menu_access_in_widescreen_mode 3@
+					if 08B5:   test 0@ bit SAVED_CONTROL_STAT
+					then
+						01B4: set_player 0 can_move 1
+						02EB: restore_camera_with_jumpcut
+					end
+					0A8C: write_memory 0x53BF8A size 2 value 0xC084 virtual_protect TRUE
+					0A8C: write_memory 0x53BF96 size 4 value 0x0298850F virtual_protect TRUE
+					0A8C: write_memory 0x60D850 size 4 value 0xF18B5756 virtual_protect TRUE
+					0A8C: write_memory 0x58FCC2 size 2 value 0xC084 virtual_protect TRUE
+					0A8C: write_memory 0x58FCFF size 1 value 0x6A virtual_protect TRUE
+					0A8C: write_memory 0x53BF9A size 2 value 0x0 virtual_protect TRUE
+					0A8C: write_memory 0x52C7F4 size 2 value 0x0DD8 virtual_protect TRUE
+					0A8C: write_memory 0x4AA440 size 4 value 0x5608EC83 virtual_protect TRUE
+					0A8C: write_memory 0x52C971 size 2 value 0x548B virtual_protect TRUE
+					0A8C: write_memory 0x561B06 size 1 value 0x00 virtual_protect TRUE
+
+					0A8D: 31@ = read_memory 0x714641 size 4 virtual_protect 0
+	                0A8C: write_memory 0x714843 size 4 value 31@ virtual_protect TRUE
+					0A8C: write_memory 0x714860 size 4 value 31@ virtual_protect TRUE
+					0AA5: call 0x561B00 num_params 0 pop 0
+					break
+				end
+				if 3@ == OFF
+				then
+					if 88B5:   not test 0@ bit KEY_TAB
+					then
+						if gosub @WIDESCREEN_BUTTON
+						then
+							if 08B5:   test 0@ bit WIDESCREEN_STATE
+							then
+							    02A3: enable_widescreen 0
+							    0A48: enable_menu_access_in_widescreen_mode 0
+							    08C3: clear 0@ bit WIDESCREEN_STATE
+							else
+								02A3: enable_widescreen 1
+							    0A48: enable_menu_access_in_widescreen_mode 1
+							    08BA: set 0@ bit WIDESCREEN_STATE
+							end
+							08BA: set 0@ bit KEY_TAB
+						end
+					else
+						if gosub @WIDESCREEN_BUTTON
+						then
+						else
+							08C3: clear 0@ bit KEY_TAB
+						end
+					end
+				end
+				if 08B5:   test 0@ bit SAVED_CONTROL_STAT
+				then
+					if 88B5:   not test 0@ bit KEY_FREECAM
+					then
+						if 00E1:   player PAD1 pressed_key SELECT
+						then
+							if 08B5:   test 0@ bit STD_CAMERA_ON
+							then
+								01B4: set_player 0 can_move 0
+								0A8D: 16@ = read_memory 23@ size 4 virtual_protect FALSE
+								0A8D: 26@ = read_memory 24@ size 4 virtual_protect FALSE
+								26@ *= 57.295779513082320876798154814105	// 180.0 / PI
+								16@ *= 57.295779513082320876798154814105	// 180.0 / PI
+								15@ = 270.0
+								15@ -= 26@
+								08C3: clear 0@ bit STD_CAMERA_ON
+							else
+								01B4: set_player 0 can_move 1
+								02EB: restore_camera_with_jumpcut
+								08BA: set 0@ bit STD_CAMERA_ON
+							end
+							08BA: set 0@ bit KEY_FREECAM
+						end
+					else
+						if 80E1:   not player PAD1 pressed_key SELECT
+						then
+							08C3: clear 0@ bit KEY_FREECAM
+						end
+					end
+				end
+			else
+				if gosub @TOGGLE_KEYPRESS
+				then
+				else
+					08C3: clear 0@ bit KEY_TOGGLE
+				end
+			end
+			if 08B5:   test 0@ bit SAVED_CONTROL_STAT
+			then
+				if 88B5:   not test 0@ bit STD_CAMERA_ON
+				then
+					TIMERA += 1	// Timers aren't updated when game is frozen, need to do it manually
+					068D: get_camera_position_to 4@ 5@ 6@
+					if TIMERA > 200
+					then
+						03CB: set_rendering_origin_at 4@ 5@ 6@
+						TIMERA = 0
+					end
+
+					// CD code starts here
+					// Start camera rotation by getting the user input.
+				    if 0A4B:   has_pad_in_hands
+					then
+						00E2: get_player PAD1 key RIGHTSTICKX state_to 7@
+					    00E2: get_player PAD1 key RIGHTSTICKY state_to 8@
+					    0093: 7@ = integer 7@ to_float
+					    0093: 8@ = integer 8@ to_float
+						if 08B5:   test 0@ bit GINPUT_INVERT_LOOK
+						then
+							8@ *= -1.0
+						end
+					else
+					   0A4A: store_mouse_X_offset_to 7@ Y_offset_to 8@
+					end
+
+					// Eazy duz it...
+					7@ /= 16.0
+					8@ /= 24.0
+
+					// If the user wants even more ctrl...
+					if gosub @SLOWER
+					then
+						7@ *= 0.3
+						8@ *= 0.3
+					end
+
+					// Lock Left/Right Angle?
+					if gosub @LOCK_X_AXIS
+					then
+						7@ = 0
+					end
+
+					// Lock Up/Down Angle?
+					if gosub @LOCK_Y_AXIS
+					then
+						8@ = 0
+					end
+
+					// Add the input to the angles.
+					15@ += 7@
+					16@ += 8@
+
+					// Angle limit (directly up, directly down).
+					if 16@ > 90.0
+					then
+						16@ = 90.0
+					end
+					if -90.0 > 16@
+					then
+						16@ = -90.0
+					end
+
+					// Limit the Y Angle.
+					0656: get_angle 15@ absolute_degrees_to 15@
+
+					// Get the X Angle offset.
+					02F6: 11@ = sine 16@
+
+					// Get the Y Angle offsets.
+					02F6: 9@ = sine 15@
+					02F7: 10@ = cosine 15@
+
+					// Up/Down keys to move forwards/backwards.
+					00E2: get_player PAD1 key LEFTSTICKY state_to 7@
+					00E2: get_player PAD1 key LEFTSTICKX state_to 8@
+					0093: 7@ = integer 7@ to_float
+					0093: 8@ = integer 8@ to_float
+					7@ *= -0.007
+					8@ *= -0.007
+
+					// And also up/down keys
+					22@ = 0
+					if 0AB0:   key_pressed VK_PRIOR
+					then
+						22@ = 0.7875
+					end
+					if 0AB0:   key_pressed VK_NEXT
+					then
+						22@ = -0.7875
+					end
+
+					if 08B7:   test 0@ bit GINPUT_USES_PAD
+					then
+					    00E2: get_player PAD1 key RIGHTSHOULDER2 state_to 22@
+					    00E2: get_player PAD1 key LEFTSHOULDER2 state_to 12@
+					    0093: 22@ = integer 22@ to_float
+					    0093: 12@ = integer 12@ to_float
+					    22@ -= 12@
+					    22@ /= 323.75
+					end
+
+					// Want more speed?
+					if gosub @FASTER
+					then
+						7@ *= 4.0
+						8@ *= 4.0
+						22@ *= 4.0
+					end
+
+					// Or more precision?
+					if gosub @SLOWER
+					then
+						7@ *= 0.04
+						8@ *= 0.04
+						22@ *= 0.04
+					end
+
+					// Process Forwards/Backwards.
+					12@ = 9@
+					13@ = 10@
+					14@ = 11@
+					12@ *= 7@
+					13@ *= 7@
+					14@ *= 7@
+					4@ += 12@
+					5@ += 13@
+					6@ += 14@
+
+					// Process Up/Down
+					6@ += 22@
+
+					// Process Left/Right.
+					7@ = 15@
+					7@ -= 90.0
+					02F6: 12@ = sine 7@
+					02F7: 13@ = cosine 7@
+					12@ *= 8@
+					13@ *= 8@
+					4@ += 12@
+					5@ += 13@
+
+					// Set new position.
+					015F: set_camera_position 4@ 5@ 6@ rotation 0 0 0
+
+					// Add the offsets to the camera position.
+					4@ += 9@
+					5@ += 10@
+					6@ += 11@
+
+					// Point the camera there.
+					0160: set_camera_point_at 4@ 5@ 6@ switchstyle JUMP_CUT
+
+					// CD code ends here
+				end
+			end
+		end
+
+	end
+end
+
+:PROCESS_GINPUT
+if not 2@ == 0
+then
+	if 0A4B:   has_pad_in_hands
+	then
+		08BA: set 0@ bit GINPUT_USES_PAD
+
+		0A9F: 7@ = current_thread_pointer
+		7@ += 0x10
+		0A8D: 7@ = read_memory 7@ size 4 virtual_protect FALSE
+		0A8F: 8@ = 7@ - @GINPUT_GENERAL_SETTINGS
+
+		0AB1: call_scm_func @GINPUT_SENDEVENT 3 2@ GINPUT_EVENT_FETCH_GENERAL_SETTINGS 8@
+		8@ += 4
+		0A8D: 8@ = read_memory 8@ size 4 virtual_protect FALSE
+		if 88B7:   not test 8@ bit GuideLaunchesOverlay
+		then
+			08BA: set 0@ bit GINPUT_CAN_GUIDE
+		else
+			08C3: clear 0@ bit GINPUT_CAN_GUIDE
+		end
+
+		7@ -= @GINPUT_PAD_SETTINGS
+		0AB1: call_scm_func @GINPUT_SENDEVENT 3 2@ GINPUT_EVENT_FETCH_PAD_SETTINGS 7@
+		7@ += 4
+		0A8D: 7@ = read_memory 7@ size 4 virtual_protect FALSE
+		if 08B7:   test 7@ bit InvertLook
+		then
+			08BA: set 0@ bit GINPUT_INVERT_LOOK
+		else
+			08C3: clear 0@ bit GINPUT_INVERT_LOOK
+		end
+	else
+	    08C3: clear 0@ bit GINPUT_CAN_GUIDE
+		08C3: clear 0@ bit GINPUT_USES_PAD
+	end
+end
+
+0A9F: 30@ = current_thread_pointer
+30@ += 0x10
+0A8D: 30@ = read_memory 30@ size 4 virtual_protect FALSE
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	0A8F: 28@ = 30@ - @HELP_MESSAGE_SHORT_G
+	0A8F: 29@ = 30@ - @HELP_MESSAGE_G
+	30@ -= @HELP_MESSAGE_2_G
+	return
+end
+0A8F: 28@ = 30@ - @HELP_MESSAGE_SHORT
+0A8F: 29@ = 30@ - @HELP_MESSAGE
+30@ -= @HELP_MESSAGE_2
+return
+
+:TOGGLE_KEYPRESS
+if 08B7:   test 0@ bit GINPUT_CAN_GUIDE
+then
+	if 00E1:   player PAD1 pressed_key HOME
+	then
+		return
+	end
+end
+00D6: if 1
+0AB0:   key_pressed VK_MENU
+0AB0:   key_pressed VK_V
+return
+
+:LOCK_X_AXIS
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key DPADLEFT
+	return
+end
+0AB0:   key_pressed VK_LBUTTON
+return
+
+:LOCK_Y_AXIS
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key DPADRIGHT
+	return
+end
+0AB0:   key_pressed VK_RBUTTON
+return
+
+:SLOWER
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key CIRCLE
+	return
+end
+0AB0:   key_pressed VK_CONTROL
+return
+
+:FASTER
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key CROSS
+	return
+end
+0AB0:   key_pressed VK_SHIFT
+return
+
+:HELP_BUTTON
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key DPADDOWN
+	return
+end
+0AB0:   key_pressed VK_OEM_3
+return
+
+:WIDESCREEN_BUTTON
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key SQUARE
+	return
+end
+0AB0:   key_pressed VK_TAB
+return
+
+:LESS_FOV
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00D6: if 1
+	00E1:   player PAD1 pressed_key LEFTSHOULDER1
+	80E1:   not player PAD1 pressed_key RIGHTSHOULDER1
+	return
+end
+0AB0:   key_pressed VK_OEM_4
+return
+
+:MORE_FOV
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00D6: if 1
+	80E1:   not player PAD1 pressed_key LEFTSHOULDER1
+	00E1:   player PAD1 pressed_key RIGHTSHOULDER1
+	return
+end
+0AB0:   key_pressed VK_OEM_6
+return
+
+:RESET_FOV
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00D6: if 1
+	00E1:   player PAD1 pressed_key LEFTSHOULDER1
+	00E1:   player PAD1 pressed_key RIGHTSHOULDER1
+	return
+end
+0AB0:   key_pressed VK_P
+return
+
+:RESET_FOV_END
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00D6: if 1
+	80E1:   not player PAD1 pressed_key LEFTSHOULDER1
+	80E1:   not player PAD1 pressed_key RIGHTSHOULDER1
+	return
+end
+8AB0:   not key_pressed VK_P
+return
+
+:CAPTURE
+if 08B7:   test 0@ bit GINPUT_USES_PAD
+then
+	00E1:   player PAD1 pressed_key TRIANGLE
+	return
+end
+0AB0:   key_pressed VK_F12
+return
+
+// Script memory
+:GINPUT_GENERAL_SETTINGS
+hex
+	08000000    // cbSize
+	00000000    // Bitfields
+end
+
+:GINPUT_PAD_SETTINGS
+hex
+	28000000    // cbSize
+	00          // _bf4
+	00          // _bf5
+	0000        // pad
+	00000000    // LeftStickDeadzone
+	00000000    // LeftStickSensitivity
+	00          // _bf10
+	000000      // pad
+	00000000    // RightStickDeadzone
+	00000000    // RightStickSensitivity
+	00000000    // FaceButtonsSensitivity
+	00000000    // SixaxisSensitivity
+	00          // _bf24
+	000000      // pad
+end
+
+:SKY_MULT
+hex
+	00000000
+end
+
+// GInputAPI functions
+
+:GINPUT_LOAD
+0AA2: 0@ = load_library "kernel32.dll" // IF and SET
+0AA4: 1@ = get_proc_address "GetModuleHandleA" library 0@ // IF and SET
+0AA7: call_function 1@ num_params 1 pop 0 "GInputSA.asi" 2@
+0AA3: free_library 0@
+if not 2@ == 0
+then
+	if 0AA4: 3@ = get_proc_address 1 library 2@ // IF and SET
+	then
+		0AA7: call_function 3@ num_params 0 pop 0 4@
+	end
+end
+0AB2: ret 1 4@
+
+:GINPUT_SENDEVENT
+0A8D: 3@ = read_memory 0@ size 4 virtual_protect 0
+0A8E: 4@ = 3@ + 16
+0A8D: 4@ = read_memory 4@ size 4 virtual_protect 0
+0AA8: call_function_method 4@ struct 0@ num_params 2 pop 0 2@ 1@ 5@
+0AB2: ret 0
+
+:HELP_MESSAGE
+hex
+"Welcome to ~h~Amazing Screenshot v1.2~s~!~n~"
+end
+
+:HELP_MESSAGE_SHORT
+hex
+"Use the ~h~movement controls ~s~to move the camera~n~Use the ~h~mouse ~s~to rotate the camera~n~~h~~k~~CAMERA_CHANGE_VIEW_ALL_SITUATIONS~ ~s~Free Camera~n~~h~PgUp ~s~Move Up~n~~h~PgDn ~s~Move Down~n~~h~LMB ~s~Lock X Axis~n~~h~RMB ~s~Lock Y Axis" 00
+end
+
+:HELP_MESSAGE_2
+hex
+"~h~Shift ~s~Faster~n~~h~Ctrl ~s~Slower~n~~h~Tab ~s~Toggle Widescreen~n~~h~[ ~s~Decrease Field of View~n~~h~] ~s~Increase Field of View~n~~h~P ~s~Reset Field of View~n~~h~Tilde ~s~Show this help again~n~~h~F12 ~s~Capture a screenshot (Store Gallery Photos must be enabled)" 00
+end
+
+
+:HELP_MESSAGE_G
+hex
+"Welcome to ~h~Amazing Screenshot v1.2~s~!~n~"
+end
+
+:HELP_MESSAGE_SHORT_G
+hex
+"Use ~[~ to move the camera~n~Use ~]~ to rotate the camera~n~~h~~k~~CAMERA_CHANGE_VIEW_ALL_SITUATIONS~ ~s~Free Camera~n~~v~ Move Up~n~~m~ Move Down~n~~<~ Lock X Axis~n~~>~ Lock Y Axis" 00
+end
+
+:HELP_MESSAGE_2_G
+hex
+"~x~ Faster~n~~o~ Slower~n~~q~ Toggle Widescreen~n~~K~ Decrease Field of View~n~~j~ Increase Field of View~n~~K~+~j~ Reset Field of View~n~~d~ Show this help again~n~~t~ Capture a screenshot (Store Gallery Photos must be enabled)" 00
+end
