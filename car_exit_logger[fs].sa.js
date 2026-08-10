@@ -579,7 +579,7 @@ function drainKeys() {
     Pad.IsKeyPressed(VK_LEFT)  || Pad.IsKeyPressed(VK_KEY_A) || Pad.IsKeyPressed(VK_NUM4) ||
     Pad.IsKeyPressed(VK_RIGHT) || Pad.IsKeyPressed(VK_KEY_D) || Pad.IsKeyPressed(VK_NUM6) ||
     Pad.IsKeyPressed(VK_ENTER) || Pad.IsKeyPressed(VK_SPACE) || Pad.IsKeyPressed(VK_NUM5) ||
-    Pad.IsKeyPressed(VK_ESC)
+    Pad.IsKeyPressed(VK_ESC)   || Pad.IsKeyPressed(VK_F6)    || Pad.IsKeyPressed(VK_F7)
   ) wait(0);
 }
 
@@ -726,7 +726,7 @@ function runMenu(player, char) {
 
   clearMenuBox();
   drainKeys();
-  f6WasDown = false;
+  f6WasDown = true;
 }
 
 function clearMenuBox() {
