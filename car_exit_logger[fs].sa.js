@@ -207,8 +207,6 @@ let lastStreamerMs = 0;
 let lastFireCheckMs = 0;
 let streamed       = {};   // entry string → car handle
 let spawnTimeMap   = {};   // key → spawn timestamp ms
-let movablePartMap = {};   // car handle → float 0.0..1.0
-let pendingMovableQueue = []; // array of { car: handle, val: float, ticksLeft: int }
 let cache          = [];
 
 // ════════════════════════════════════════════════════════════════
@@ -290,89 +288,7 @@ function getCarHdg(c) {
 
 
 
-function isMovablePartModel(mid) {
-  return mid === 443 || mid === 530 || mid === 406 || mid === 486 || mid === 525 || mid === 531 || mid === 592;
-}
 
-function updateMovablePartControl(char) {
-  try {
-    if (!char || !char.isInAnyCar()) return;
-    const car = getCarHandle(char);
-    if (!car) return;
-    const mid = getCarModelId(car);
-    if (!isMovablePartModel(mid)) return;
-
-    let h = 0;
-    try { h = car.handle || +car; } catch(e) {}
-    if (!h) return;
-
-    if (!movablePartMap.hasOwnProperty(h)) {
-      movablePartMap[h] = 1.0; // Default: ramp raised / forks up
-    }
-
-    const num2Pressed = Pad.IsKeyPressed(VK_NUM2);
-    const num8Pressed = Pad.IsKeyPressed(VK_NUM8);
-
-    // In GTA SA: Numpad 2 / Special Up raises ramp to 1.0, Numpad 8 / Special Down lowers ramp to 0.0
-    if (num2Pressed) {
-      movablePartMap[h] = Math.min(1.0, movablePartMap[h] + 0.05);
-    } else if (num8Pressed) {
-      movablePartMap[h] = Math.max(0.0, movablePartMap[h] - 0.05);
-    }
-  } catch(e) {}
-}
-
-function getCarMovablePart(c) {
-  if (!c) return -1;
-  const obj = toCar(c);
-  if (!obj) return -1;
-  const mid = getCarModelId(obj);
-  if (!isMovablePartModel(mid)) return -1;
-
-  let h = 0;
-  try { h = obj.handle || +obj; } catch(e) {}
-  if (h && movablePartMap.hasOwnProperty(h)) {
-    return movablePartMap[h];
-  }
-
-  try {
-    if (typeof obj.getMovablePart === 'function') {
-      const v = +obj.getMovablePart();
-      if (!isNaN(v) && v >= 0.0) return v;
-    }
-  } catch(e) {}
-
-  return 1.0; // Default ramp raised (1.0)
-}
-
-function setCarMovablePart(c, val) {
-  if (!c || val === undefined || val === null || val < 0) return;
-  const obj = toCar(c);
-  if (!obj) return;
-  try {
-    if (typeof obj.controlMovablePart === 'function') {
-      obj.controlMovablePart(+val);
-    } else if (typeof Car !== 'undefined' && typeof Car.ControlMovablePart === 'function') {
-      Car.ControlMovablePart(obj, +val);
-    }
-  } catch(e) {}
-}
-
-function processPendingMovableParts() {
-  if (!pendingMovableQueue || !pendingMovableQueue.length) return;
-  for (let i = pendingMovableQueue.length - 1; i >= 0; i--) {
-    const item = pendingMovableQueue[i];
-    if (!isCarValid(item.car) || isCarDestroyed(item.car)) {
-      pendingMovableQueue.splice(i, 1);
-      continue;
-    }
-    setCarMovablePart(item.car, item.val);
-    item.ticksLeft--;
-    if (item.ticksLeft <= 0) {
-      pendingMovableQueue.splice(i, 1);
-    }
-  }
-}
 
 
 
@@ -945,10 +861,6 @@ function runStreamer(char) {
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             try { nc.setHeading(d.heading); } catch(e) {}
-            if (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) {
-              setCarMovablePart(nc, d.movablePart);
-              pendingMovableQueue.push({ car: nc, val: d.movablePart, ticksLeft: 20 });
-            }
             try { nc.changeColor(d.primaryColor, d.secondaryColor); } catch(e) {}
             if (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) {
               setCarPaintjob(nc, d.paintjob);
@@ -1022,10 +934,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
     const mDistSq = mDx*mDx + mDy*mDy + mDz*mDz;
     const mHdgDiff = Math.abs(hdg - d.heading);
 
-    const curMov = getCarMovablePart(h);
-    const mMovDiff = (curMov >= 0 && d.movablePart !== undefined && d.movablePart >= 0) ? Math.abs(curMov - d.movablePart) : 0;
-
-    if (mDistSq >= 0.25 || mHdgDiff >= 5.0 || mMovDiff >= 0.05) {
+    if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
       const hp     = getCarHealth(h);
       if (hp <= 250) return false;
 
@@ -1038,7 +947,6 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
 
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
-        movablePart: (curMov >= 0 ? curMov : d.movablePart),
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
         extraColor1: extraC.c3, extraColor2: extraC.c4,
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1193,7 +1101,6 @@ function formatMinifiedEntry(d) {
   const trStr = (d.tires && d.tires.length) ? d.tires.join(",") : "";
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
-  const movStr = (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) ? d.movablePart.toFixed(2) : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
 
   return d.modelId + "|" +
@@ -1205,7 +1112,6 @@ function formatMinifiedEntry(d) {
          trStr + "|" +
          dmStr + "|" +
          ddStr + "|" +
-         movStr + "|" +
          uStr;
 }
 
@@ -1227,8 +1133,6 @@ function saveCarExit(car) {
 
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
-    const mov    = getCarMovablePart(car);
-    log("LOGGER: getCarMovablePart for model " + mid + " returned " + mov);
     const clrs   = getCarColors(car);
     const extraC = getCarExtraColors(car);
     const mods   = getCarMods(car, mid);
@@ -1239,7 +1143,6 @@ function saveCarExit(car) {
 
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
-      movablePart: mov,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
       extraColor1: extraC.c3, extraColor2: extraC.c4,
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1317,20 +1220,7 @@ function parseEntry(line) {
           }
         }
 
-        let movablePart = -1;
-        let upgradesPart = "";
-
-        if (parts[9]) {
-          const p9vals = parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
-          if (p9vals.length === 1 && p9vals[0] >= 0.0 && p9vals[0] <= 360.0) {
-            movablePart = p9vals[0];
-            upgradesPart = parts[10] || "";
-          } else if (p9vals.every(v => v >= 1000 && v <= 1193)) {
-            upgradesPart = parts[9];
-          }
-        } else if (parts[10]) {
-          upgradesPart = parts[10];
-        }
+        const upgradesPart = parts[9] || parts[10] || "";
 
         const upgrades = [];
         if (upgradesPart) {
@@ -1573,9 +1463,6 @@ while (true) {
     continue;
   }
 
-  checkCheatCodes(player, char);
-  processPendingMovableParts();
-
   // ── F7: reload INI + re-stream ────────────────────────────────
   const f7Now = Pad.IsKeyPressed(VK_F7);
   if (f7Now && !f7WasDown) {
@@ -1617,8 +1504,8 @@ while (true) {
   // ── EXIT LOGGER: detect car entry/exit ───────────────────────
   const inCar = char.isInAnyCar();
 
+  checkCheatCodes(player, char);
   if (inCar) {
-    updateMovablePartControl(char);
     if (!wasInCar) {
       wasInCar = true;
       fireNotified = false;
