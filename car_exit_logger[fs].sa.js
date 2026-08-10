@@ -308,14 +308,17 @@ function getCarMovablePart(c) {
     else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
 
     if (ptr && typeof Memory !== 'undefined' && typeof Memory.ReadFloat === 'function') {
-      const v1 = Memory.ReadFloat(ptr + 0x8C0);
-      if (!isNaN(v1) && v1 >= 0.0 && v1 <= 1.0) return v1;
-      const v2 = Memory.ReadFloat(ptr + 0x8C4);
-      if (!isNaN(v2) && v2 >= 0.0 && v2 <= 1.0) return v2;
-      const v3 = Memory.ReadFloat(ptr + 0x8A4);
-      if (!isNaN(v3) && v3 >= 0.0 && v3 <= 1.0) return v3;
+      for (let offset = 0x870; offset <= 0x920; offset += 4) {
+        const val = Memory.ReadFloat(ptr + offset);
+        if (!isNaN(val) && val > 0.001 && val <= 1.0) {
+          log("LOGGER: getCarMovablePart found float at ptr+0x" + offset.toString(16) + " = " + val);
+          return val;
+        }
+      }
     }
-  } catch(e) {}
+  } catch(e) {
+    log("LOGGER: getCarMovablePart error: " + (e.stack || e));
+  }
   return -1;
 }
 
@@ -328,6 +331,17 @@ function setCarMovablePart(c, val) {
       obj.controlMovablePart(+val);
     } else if (typeof Car !== 'undefined' && typeof Car.ControlMovablePart === 'function') {
       Car.ControlMovablePart(obj, +val);
+    }
+  } catch(e) {}
+  try {
+    let ptr = 0;
+    if (typeof obj.getPointer === 'function') ptr = obj.getPointer();
+    else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
+
+    if (ptr && typeof Memory !== 'undefined' && typeof Memory.WriteFloat === 'function') {
+      for (let offset = 0x870; offset <= 0x920; offset += 4) {
+        Memory.WriteFloat(ptr + offset, +val);
+      }
     }
   } catch(e) {}
 }
