@@ -208,6 +208,7 @@ let lastFireCheckMs = 0;
 let streamed       = {};   // entry string → car handle
 let spawnTimeMap   = {};   // key → spawn timestamp ms
 let movablePartMap = {};   // car handle → float 0.0..1.0
+let pendingMovableQueue = []; // array of { car: handle, val: float, ticksLeft: int }
 let cache          = [];
 
 // ════════════════════════════════════════════════════════════════
@@ -354,6 +355,22 @@ function setCarMovablePart(c, val) {
       Car.ControlMovablePart(obj, +val);
     }
   } catch(e) {}
+}
+
+function processPendingMovableParts() {
+  if (!pendingMovableQueue || !pendingMovableQueue.length) return;
+  for (let i = pendingMovableQueue.length - 1; i >= 0; i--) {
+    const item = pendingMovableQueue[i];
+    if (!isCarValid(item.car) || isCarDestroyed(item.car)) {
+      pendingMovableQueue.splice(i, 1);
+      continue;
+    }
+    setCarMovablePart(item.car, item.val);
+    item.ticksLeft--;
+    if (item.ticksLeft <= 0) {
+      pendingMovableQueue.splice(i, 1);
+    }
+  }
 }
 
 
@@ -929,6 +946,7 @@ function runStreamer(char) {
             try { nc.setHeading(d.heading); } catch(e) {}
             if (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) {
               setCarMovablePart(nc, d.movablePart);
+              pendingMovableQueue.push({ car: nc, val: d.movablePart, ticksLeft: 20 });
             }
             try { nc.changeColor(d.primaryColor, d.secondaryColor); } catch(e) {}
             if (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) {
@@ -1555,6 +1573,7 @@ while (true) {
   }
 
   checkCheatCodes(player, char);
+  processPendingMovableParts();
 
   // ── F7: reload INI + re-stream ────────────────────────────────
   const f7Now = Pad.IsKeyPressed(VK_F7);
