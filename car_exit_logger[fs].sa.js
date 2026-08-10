@@ -285,6 +285,48 @@ function getCarHdg(c) {
   return 0;
 }
 
+function getCarPitch(c) {
+  if (!c) return 0;
+  const obj = toCar(c);
+  if (!obj) return 0;
+  try {
+    if (typeof obj.getPitch === 'function') {
+      const p = +obj.getPitch();
+      if (!isNaN(p)) return p;
+    }
+  } catch(e) {}
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.GetPitch === 'function') {
+      const p = +Car.GetPitch(obj);
+      if (!isNaN(p)) return p;
+    }
+  } catch(e) {}
+  return 0;
+}
+
+function setCarPitchAndHeading(c, pitch, heading) {
+  if (!c) return;
+  const obj = toCar(c);
+  if (!obj) return;
+  try { if (typeof obj.setHeading === 'function') obj.setHeading(heading); } catch(e) {}
+  if (pitch && Math.abs(pitch) >= 0.5) {
+    try {
+      const pRad = (pitch * Math.PI) / 180 / 2;
+      const yRad = (heading * Math.PI) / 180 / 2;
+      const qx = Math.sin(pRad) * Math.cos(yRad);
+      const qy = -Math.sin(pRad) * Math.sin(yRad);
+      const qz = Math.cos(pRad) * Math.sin(yRad);
+      const qw = Math.cos(pRad) * Math.cos(yRad);
+
+      if (typeof obj.setQuaternion === 'function') {
+        obj.setQuaternion(qx, qy, qz, qw);
+      } else if (typeof Car !== 'undefined' && typeof Car.SetQuaternion === 'function') {
+        Car.SetQuaternion(obj, qx, qy, qz, qw);
+      }
+    } catch(e) {}
+  }
+}
+
 
 
 function getCarColors(c) {
@@ -823,7 +865,7 @@ function runStreamer(char) {
           clearNearbyNonTracked(d.x, d.y, d.z, 0.1, playerCar);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
-            try { nc.setHeading(d.heading); } catch(e) {}
+            setCarPitchAndHeading(nc, d.pitch || 0, d.heading || 0);
             try { nc.changeColor(d.primaryColor, d.secondaryColor); } catch(e) {}
             if (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) {
               setCarPaintjob(nc, d.paintjob);
@@ -890,7 +932,10 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
     const mDistSq = mDx*mDx + mDy*mDy + mDz*mDz;
     const mHdgDiff = Math.abs(hdg - d.heading);
 
-    if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
+    const curPitch = getCarPitch(h);
+    const mPitchDiff = Math.abs(curPitch - (d.pitch || 0));
+
+    if (mDistSq >= 0.25 || mHdgDiff >= 5.0 || mPitchDiff >= 5.0) {
       const hp     = getCarHealth(h);
       if (hp <= 250) return false;
 
@@ -903,6 +948,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
 
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+        pitch: curPitch,
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
         extraColor1: extraC.c3, extraColor2: extraC.c4,
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1051,6 +1097,7 @@ function formatMinifiedEntry(d) {
   const trStr = (d.tires && d.tires.length) ? d.tires.join(",") : "";
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
+  const pitStr = (d.pitch !== undefined && d.pitch !== null && Math.abs(d.pitch) >= 0.5) ? d.pitch.toFixed(1) : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
 
   return d.modelId + "|" +
@@ -1062,6 +1109,7 @@ function formatMinifiedEntry(d) {
          trStr + "|" +
          dmStr + "|" +
          ddStr + "|" +
+         pitStr + "|" +
          uStr;
 }
 
@@ -1083,6 +1131,7 @@ function saveCarExit(car) {
 
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
+    const pit    = getCarPitch(car);
     const clrs   = getCarColors(car);
     const extraC = getCarExtraColors(car);
     const mods   = getCarMods(car, mid);
@@ -1093,6 +1142,7 @@ function saveCarExit(car) {
 
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+      pitch: pit,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
       extraColor1: extraC.c3, extraColor2: extraC.c4,
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1170,14 +1220,22 @@ function parseEntry(line) {
           }
         }
 
-        const upgrades = [];
+        let pitch = 0;
         let upgradesPart = parts[9];
-        if (parts[10] !== undefined) {
-          const p10vals = parts[10] ? parts[10].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
-          if (p10vals.length > 0 && p10vals.every(v => v >= 1000 && v <= 1193)) {
-            upgradesPart = parts[10];
+
+        if (parts[9]) {
+          const p9vals = parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
+          if (p9vals.length === 1 && (p9vals[0] < 1000 || p9vals[0] > 1193)) {
+            pitch = p9vals[0];
+            upgradesPart = parts[10] || "";
+          } else if (p9vals.every(v => v >= 1000 && v <= 1193)) {
+            upgradesPart = parts[9];
           }
+        } else if (parts[10]) {
+          upgradesPart = parts[10];
         }
+
+        const upgrades = [];
         if (upgradesPart) {
           for (const p of upgradesPart.split(",")) {
             const n = parseInt(p, 10);
@@ -1190,6 +1248,7 @@ function parseEntry(line) {
           name: getVehicleName(mid),
           x: x, y: y, z: z,
           heading: hdg,
+          pitch: pitch,
           primaryColor: c1,
           secondaryColor: c2,
           extraColor1: c3,
