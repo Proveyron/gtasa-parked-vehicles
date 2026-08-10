@@ -580,8 +580,8 @@ function renderParkedMenu(entries, sel) {
     }
   }
 
-  // 3. FOOTER CONTROL HINTS
-  txt += "~w~Up/Down/8/2=Move  Enter/5=Teleport  F6/ESC=Exit";
+  // 3. FOOTER CONTROL HINTS (Numpad 8, 2, 4, 6)
+  txt += "~w~8/2=Move & Teleport  4/6=Page  F6=Exit";
 
   showTextBox(txt);
 }
@@ -646,12 +646,12 @@ function runMenu(player, char) {
 
     const pageSize = 5;
 
-    const upN    = Pad.IsKeyPressed(VK_NUM8) || Pad.IsKeyPressed(VK_UP) || Pad.IsKeyPressed(VK_KEY_W);
-    const downN  = Pad.IsKeyPressed(VK_NUM2) || Pad.IsKeyPressed(VK_DOWN) || Pad.IsKeyPressed(VK_KEY_S);
-    const leftN  = Pad.IsKeyPressed(VK_NUM4) || Pad.IsKeyPressed(VK_LEFT) || Pad.IsKeyPressed(VK_KEY_A);
-    const rightN = Pad.IsKeyPressed(VK_NUM6) || Pad.IsKeyPressed(VK_RIGHT) || Pad.IsKeyPressed(VK_KEY_D);
-    const enterN = Pad.IsKeyPressed(VK_NUM5) || Pad.IsKeyPressed(VK_ENTER) || Pad.IsKeyPressed(VK_SPACE);
-    const f6N    = Pad.IsKeyPressed(VK_F6)   || Pad.IsKeyPressed(VK_ESC);
+    const upN    = Pad.IsKeyPressed(VK_NUM8);
+    const downN  = Pad.IsKeyPressed(VK_NUM2);
+    const leftN  = Pad.IsKeyPressed(VK_NUM4);
+    const rightN = Pad.IsKeyPressed(VK_NUM6);
+    const enterN = Pad.IsKeyPressed(VK_NUM5);
+    const f6N    = Pad.IsKeyPressed(VK_F6);
 
     if (f6N && !f6D) break;
 
@@ -714,11 +714,6 @@ function getTeleportOffset(mid) {
   return { dist: 2.3, zOffset: 0.3 };
 }
 
-function setCharCoordinates(char, x, y, z) {
-  try { if (typeof char.setCoordinates === 'function') { char.setCoordinates(x, y, z); return; } } catch(e) {}
-  try { if (typeof Char !== 'undefined' && typeof Char.SetCoordinates === 'function') { Char.SetCoordinates(char, x, y, z); return; } } catch(e) {}
-}
-
 function setCharHeading(char, hdg) {
   try { if (typeof char.setHeading === 'function') { char.setHeading(hdg); return; } } catch(e) {}
   try { if (typeof Char !== 'undefined' && typeof Char.SetHeading === 'function') { Char.SetHeading(char, hdg); return; } } catch(e) {}
@@ -754,7 +749,7 @@ function teleportTo(line, char, silent) {
   const tpY = d.y + Math.cos(rad) * cfg.dist;
   const tpZ = d.z + cfg.zOffset;
 
-  setCharCoordinates(char, tpX, tpY, tpZ);
+  char.setCoordinates(tpX, tpY, tpZ);
   setCharHeading(char, heading - 90);
 
   try {
@@ -1481,7 +1476,6 @@ while (true) {
     runStreamer(char);
     log("LOGGER: reloaded, " + cache.length + " entries");
     showTextBox("~y~INI reloaded! ~g~" + cache.length + " ~y~entries");
-    drainKeys();
   }
 
   // ── F6: open menu (blocking sub-loop, main loop suspends) ─────
