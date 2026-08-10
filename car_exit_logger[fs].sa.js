@@ -390,41 +390,59 @@ function setCarHealth(c, health) {
   }
 }
 
-function applyVisualDamage(c, health) {
-  if (!c || !health || health >= 980) return;
-  try {
-    const damP = (car, p) => {
-      try { if (typeof car.damagePanel === 'function') car.damagePanel(p); } catch(e) {}
-      try { if (typeof Car !== 'undefined' && typeof Car.DamagePanel === 'function') Car.DamagePanel(car, p); } catch(e) {}
-    };
-    const damD = (car, d) => {
-      try { if (typeof car.damageDoor === 'function') car.damageDoor(d); } catch(e) {}
-      try { if (typeof Car !== 'undefined' && typeof Car.DamageDoor === 'function') Car.DamageDoor(car, d); } catch(e) {}
-    };
+function getCarDamage(c) {
+  const obj = toCar(c);
+  if (!obj) return { panels: [], doors: [] };
 
-    // 1. Front and Rear Bumpers (health < 900)
-    if (health < 900) {
-      damP(c, 0); // Front Bumper
-      damP(c, 1); // Rear Bumper
+  const doors = [];
+  for (let d = 0; d <= 5; d++) {
+    try {
+      let isDam = false;
+      if (typeof obj.isDoorDamaged === 'function') isDam = obj.isDoorDamaged(d);
+      else if (typeof Car !== 'undefined' && typeof Car.IsDoorDamaged === 'function') isDam = Car.IsDoorDamaged(obj, d);
+      if (isDam) doors.push(d);
+    } catch(e) {}
+  }
+
+  const panels = [];
+  for (let p = 0; p <= 6; p++) {
+    try {
+      let isDam = false;
+      if (typeof obj.isPanelDamaged === 'function') isDam = obj.isPanelDamaged(p);
+      else if (typeof Car !== 'undefined' && typeof Car.IsPanelDamaged === 'function') isDam = Car.IsPanelDamaged(obj, p);
+      if (isDam) panels.push(p);
+    } catch(e) {}
+  }
+
+  if (!panels.length && doors.length) {
+    if (doors.indexOf(0) !== -1) panels.push(2); // Bonnet
+    if (doors.indexOf(1) !== -1) panels.push(3); // Trunk
+  }
+
+  return { panels: panels, doors: doors };
+}
+
+function applyStoredDamage(c, panels, doors) {
+  if (!c) return;
+  const obj = toCar(c);
+  if (!obj) return;
+
+  if (panels && panels.length) {
+    for (const p of panels) {
+      try {
+        if (typeof obj.damagePanel === 'function') obj.damagePanel(p);
+        else if (typeof Car !== 'undefined' && typeof Car.DamagePanel === 'function') Car.DamagePanel(obj, p);
+      } catch(e) {}
     }
-    // 2. Bonnet/Hood & Front Doors (health < 750)
-    if (health < 750) {
-      damP(c, 2); // Bonnet/Hood
-      damD(c, 2); // Front Left Door
-      damD(c, 3); // Front Right Door
+  }
+
+  if (doors && doors.length) {
+    for (const d of doors) {
+      try {
+        if (typeof obj.damageDoor === 'function') obj.damageDoor(d);
+        else if (typeof Car !== 'undefined' && typeof Car.DamageDoor === 'function') Car.DamageDoor(obj, d);
+      } catch(e) {}
     }
-    // 3. Windscreen crack & Trunk (health < 550)
-    if (health < 550) {
-      damP(c, 4); // Windscreen
-      damP(c, 3); // Boot/Trunk
-    }
-    // 4. Dent ALL possible panels and doors (health < 450)
-    if (health < 450) {
-      for (let p = 0; p <= 6; p++) damP(c, p);
-      for (let d = 0; d <= 5; d++) damD(c, d);
-    }
-  } catch(e) {
-    log("LOGGER: applyVisualDamage error: " + (e.stack || e));
   }
 }
 
@@ -796,8 +814,8 @@ function runStreamer(char) {
             if (CFG.unlockDoors) try { nc.lockDoors(1); } catch(e) {}
             if (CFG.saveHealth && d.health && d.health > 250 && d.health <= 1000) {
               setCarHealth(nc, d.health);
-              applyVisualDamage(nc, d.health);
             }
+            applyStoredDamage(nc, d.panels, d.doors);
             if (CFG.saveTires && d.tires && d.tires.length > 0) {
               setCarPoppedTires(nc, d.tires);
             }
@@ -977,6 +995,7 @@ function saveCarExit(car) {
     const loc    = getMapLocation(cp.x, cp.y, cp.z);
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
+    const dam    = getCarDamage(car);
 
     const clrStr = (extraC.c3 >= 0 && extraC.c4 >= 0)
                  ? (clrs.c1 + "," + clrs.c2 + "," + extraC.c3 + "," + extraC.c4)
@@ -991,6 +1010,8 @@ function saveCarExit(car) {
                  (pj >= 0 ? ("|P:" + pj) : "") +
                  "|Hp:" + (CFG.saveHealth ? hp : 1000) +
                  "|Tr:" + (CFG.saveTires && tires.length ? tires.join(";") : "None") +
+                 "|Dm:" + (dam.panels.length ? dam.panels.join(";") : "None") +
+                 "|Dd:" + (dam.doors.length ? dam.doors.join(";") : "None") +
                  "|U:"  + (mods.length ? mods.join(";") : "None") +
                  (loc ? ("|L:" + shortenLoc(loc)) : "");
 
@@ -1029,6 +1050,8 @@ function parseEntry(line) {
     const pjM  = line.match(/(?:Paintjob:|P:)(\d+)/);
     const hpM  = line.match(/(?:Health:|Hp:)(\d+)/);
     const trM  = line.match(/(?:Tires:|Tr:)([^|\r\n]+)/);
+    const dmM  = line.match(/(?:Panels:|Dm:)([^|\r\n]+)/);
+    const ddM  = line.match(/(?:Doors:|Dd:)([^|\r\n]+)/);
     const uM   = line.match(/(?:Upgrades:|U:)([^|\r\n]+)/);
     const paintjob = pjM ? parseInt(pjM[1], 10) : -1;
     const tires = [];
@@ -1036,6 +1059,20 @@ function parseEntry(line) {
       for (const p of trM[1].trim().split(";")) {
         const n = parseInt(p, 10);
         if (n >= 0 && n <= 5) tires.push(n);
+      }
+    }
+    const panels = [];
+    if (dmM && dmM[1].trim() !== "None") {
+      for (const p of dmM[1].trim().split(";")) {
+        const n = parseInt(p, 10);
+        if (n >= 0 && n <= 6) panels.push(n);
+      }
+    }
+    const doors = [];
+    if (ddM && ddM[1].trim() !== "None") {
+      for (const p of ddM[1].trim().split(";")) {
+        const n = parseInt(p, 10);
+        if (n >= 0 && n <= 5) doors.push(n);
       }
     }
     const upgrades = [];
@@ -1068,6 +1105,8 @@ function parseEntry(line) {
       paintjob:       paintjob,
       health:         health,
       tires:          tires,
+      panels:         panels,
+      doors:          doors,
       upgrades,
     };
   } catch(e) { return null; }
@@ -1193,6 +1232,8 @@ function gatherAndUpdateAllOnStart() {
                       (pj >= 0 ? ("|P:" + pj) : "") +
                       "|Hp:" + d.health +
                       "|Tr:" + (d.tires && d.tires.length ? d.tires.join(";") : "None") +
+                      "|Dm:" + (d.panels && d.panels.length ? d.panels.join(";") : "None") +
+                      "|Dd:" + (d.doors && d.doors.length ? d.doors.join(";") : "None") +
                       "|U:"  + (d.upgrades && d.upgrades.length ? d.upgrades.join(";") : "None") +
                       (freshLoc ? ("|L:" + shortenLoc(freshLoc)) : "");
 

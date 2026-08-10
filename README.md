@@ -94,7 +94,7 @@ Parked vehicle entries are stored in clean key-value tags:
 ```ini
 [Vehicles]
 Count=1
-Entry0=M:567|N:Savanna|C:2644.59,-2002.99,13.18|H:195.36|Cl:1,61,0,0|P:2|Hp:1000|Tr:None|U:1133;1130;1010;1087;1086;1078;1132;1188|L:Ganton
+Entry0=M:567|N:Savanna|C:2644.59,-2002.99,13.18|H:195.36|Cl:1,61,0,0|P:2|Hp:1000|Tr:None|Dm:0;1;4|Dd:2;3|U:1133;1130;1010;1087;1086;1078;1132;1188|L:Ganton
 ```
 
 | Tag | Field | Description |
@@ -107,6 +107,8 @@ Entry0=M:567|N:Savanna|C:2644.59,-2002.99,13.18|H:195.36|Cl:1,61,0,0|P:2|Hp:1000
 | `P:` | Paintjob | Active vinyl paintjob ID (0..2) |
 | `Hp:`| Health | Engine health points (251..1000 HP) |
 | `Tr:`| Popped Tires | Deflated tire indices (`0;1;2;3` or `None`) |
+| `Dm:`| Damaged Panels | Exact dented panel indices (`0..6` or `None`) |
+| `Dd:`| Damaged Doors | Exact dented door indices (`0..5` or `None`) |
 | `U:` | Upgrades | Installed tuning mod IDs (e.g. `1133;1130` or `None`) |
 | `L:` | Location | Shortened map zone or city area name |
 
