@@ -207,6 +207,7 @@ let lastStreamerMs = 0;
 let lastFireCheckMs = 0;
 let streamed       = {};   // entry string → car handle
 let spawnTimeMap   = {};   // key → spawn timestamp ms
+let movablePartMap = {};   // car handle → float 0.0..1.0
 let cache          = [];
 
 // ════════════════════════════════════════════════════════════════
@@ -292,6 +293,33 @@ function isMovablePartModel(mid) {
   return mid === 443 || mid === 530 || mid === 406 || mid === 486 || mid === 525 || mid === 531 || mid === 592;
 }
 
+function updateMovablePartControl(char) {
+  try {
+    if (!char || !char.isInAnyCar()) return;
+    const car = getCarHandle(char);
+    if (!car) return;
+    const mid = getCarModelId(car);
+    if (!isMovablePartModel(mid)) return;
+
+    let h = 0;
+    try { h = car.handle || +car; } catch(e) {}
+    if (!h) return;
+
+    if (!movablePartMap.hasOwnProperty(h)) {
+      movablePartMap[h] = 0.0;
+    }
+
+    const upPressed   = Pad.IsKeyPressed(VK_NUM8);
+    const downPressed = Pad.IsKeyPressed(VK_NUM2);
+
+    if (upPressed) {
+      movablePartMap[h] = Math.min(1.0, movablePartMap[h] + 0.05);
+    } else if (downPressed) {
+      movablePartMap[h] = Math.max(0.0, movablePartMap[h] - 0.05);
+    }
+  } catch(e) {}
+}
+
 function getCarMovablePart(c) {
   if (!c) return -1;
   const obj = toCar(c);
@@ -299,18 +327,20 @@ function getCarMovablePart(c) {
   const mid = getCarModelId(obj);
   if (!isMovablePartModel(mid)) return -1;
 
+  let h = 0;
+  try { h = obj.handle || +obj; } catch(e) {}
+  if (h && movablePartMap.hasOwnProperty(h)) {
+    return movablePartMap[h];
+  }
+
   try {
     if (typeof obj.getMovablePart === 'function') {
       const v = +obj.getMovablePart();
       if (!isNaN(v) && v >= 0.0) return v;
     }
-    if (typeof Car !== 'undefined' && typeof Car.GetMovablePart === 'function') {
-      const v = +Car.GetMovablePart(obj);
-      if (!isNaN(v) && v >= 0.0) return v;
-    }
   } catch(e) {}
 
-  return -1;
+  return 0.0;
 }
 
 function setCarMovablePart(c, val) {
@@ -1568,6 +1598,7 @@ while (true) {
   const inCar = char.isInAnyCar();
 
   if (inCar) {
+    updateMovablePartControl(char);
     if (!wasInCar) {
       wasInCar = true;
       fireNotified = false;
