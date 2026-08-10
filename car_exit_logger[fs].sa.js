@@ -861,6 +861,58 @@ function runStreamer(char) {
   }
 }
 
+function updateParkedCarStateIfNeeded(h, d, i, entries) {
+  try {
+    if (!isCarValid(h) || isCarDestroyed(h)) return false;
+    const cp = getCarPos(h);
+    const hdg = getCarHdg(h);
+    const mDx = cp.x - d.x, mDy = cp.y - d.y, mDz = cp.z - d.z;
+    const mDistSq = mDx*mDx + mDy*mDy + mDz*mDz;
+    const mHdgDiff = Math.abs(hdg - d.heading);
+
+    if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
+      const hp = getCarHealth(h);
+      if (hp <= 250) return false;
+
+      const clrs   = getCarColors(h);
+      const extraC = getCarExtraColors(h);
+      const mods   = getCarMods(h, d.modelId);
+      const tires  = getCarPoppedTires(h);
+      const pj     = getCarPaintjob(h);
+      const dam    = getCarDamage(h);
+      const extras = getCarExtras(h);
+
+      const newLine = formatMinifiedEntry({
+        modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+        primaryColor: clrs.c1, secondaryColor: clrs.c2,
+        extraColor1: extraC.c3, extraColor2: extraC.c4,
+        paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
+        tires: (CFG.saveTires ? tires : []),
+        panels: dam.panels, doors: dam.doors,
+        varA: extras[0], varB: extras[1],
+        upgrades: mods
+      });
+
+      const oldKey = getUniqueKey(d);
+      entries[i] = newLine;
+      cache = entries;
+      writeDisk(cache);
+
+      if (oldKey && streamed.hasOwnProperty(oldKey)) delete streamed[oldKey];
+
+      const newD = parseEntry(newLine);
+      const newKey = getUniqueKey(newD);
+      if (newKey) streamed[newKey] = h;
+
+      log("LOGGER: Updated position for moved parked " + getVehicleName(d.modelId) + " to " + cp.x.toFixed(1) + "," + cp.y.toFixed(1));
+      return true;
+    }
+  } catch(e) {
+    log("LOGGER: updateParkedCarState error: " + (e.stack || e));
+  }
+  return false;
+}
+
 function clearNearbyNonTracked(x, y, z, r, playerCar) {
   try {
     let next = false;
