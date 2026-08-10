@@ -1,0 +1,1150 @@
+/// <reference path=".config/sa.d.ts" />
+
+// ════════════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════════════
+const CFG = {
+  TIME_LIMIT_MS:   90000,
+  RECORD_EVERY_MS: 150,
+  MAX_WAYPOINTS:   600,
+  ARRIVAL_RADIUS:  6.0,
+
+  SPAWNS: [],
+  CHECKPOINTS: [],
+
+  // All car models from the provided list
+  CAR_MODELS: [
+    602, 496, 401, 518, 527, 589, 419, 587, 533, 526,
+    474, 545, 517, 410, 600, 436, 439, 549, 491,
+    445, 604, 507, 585, 466, 492, 546, 551, 516, 467,
+    426, 547, 405, 580, 409, 550, 566, 540, 421, 529,
+  ],
+
+  GHOST_COLORS: [
+    [76, 0],
+    [79, 0],
+    [92, 0],
+    [55, 0],
+    [41, 0],
+  ],
+};
+
+// ════════════════════════════════════════════════════════════════
+//  GLOBAL STATE
+//  All active objects are tracked here so F5 always wipes them
+//  before starting a new run, preventing stacking.
+// ════════════════════════════════════════════════════════════════
+
+let activePlayerCar = null;
+let activeCpBlip       = null;
+let activeCpMarker     = null;
+let activeGhosts    = [];
+let stopRequested   = false;
+
+// ════════════════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════════════════
+
+function dist2(x1, y1, x2, y2) {
+  const dx = x1 - x2, dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function loadModelSync(id) {
+  Streaming.RequestModel(id);
+  Streaming.LoadAllModelsNow();
+  return Streaming.HasModelLoaded(id);
+}
+
+function spawnCarSync(modelId, x, y, z) {
+  if (!loadModelSync(modelId)) return null;
+  const car = Car.Create(modelId, x, y, z);
+  Streaming.MarkModelAsNoLongerNeeded(modelId);
+  return car || null;
+}
+
+// Cast downward from 200 units up to always hit the real surface
+function getGroundZ(x, y) {
+  return World.GetGroundZFor3DCoord(x, y, 200.0);
+}
+
+// Returns {x, y, z} snapped to ground, avoiding water.
+// If the ground is underwater, snaps to the nearest road node instead.
+function getSafeCheckpoint(x, y) {
+  const gz = getGroundZ(x, y);
+  const wh = World.GetWaterHeightAtCoords(x, y, false);
+  // wh > gz means the surface is submerged
+  if (wh > gz) {
+    const node = Path.GetClosestCarNode(x, y, gz);
+    const nz   = getGroundZ(node.nodeX, node.nodeY);
+    return { x: node.nodeX, y: node.nodeY, z: nz + 1.0 };
+  }
+  return { x, y, z: gz + 1.0 };
+}
+
+// ════════════════════════════════════════════════════════════════
+//  GLOBAL CLEANUP
+//  Destroys every tracked object. Called on F5 and after each round.
+// ════════════════════════════════════════════════════════════════
+
+function globalCleanup(ejectPlayer) {
+  for (const g of activeGhosts) {
+    if (g.blip)    g.blip.remove();
+    if (g.wpBlips) for (const b of g.wpBlips) b.remove();
+    if (g.driver)  g.driver.delete();
+    if (g.car)     g.car.delete();
+  }
+  activeGhosts = [];
+
+  if (activeCpBlip)   { activeCpBlip.remove();   activeCpBlip   = null; }
+  if (activeCpMarker) { activeCpMarker.delete(); activeCpMarker = null; }
+
+  for (const b of allCreatorBlips) b.remove();
+  allCreatorBlips = [];
+
+  if (activePlayerCar) {
+    if (ejectPlayer) {
+      const char = new Player(0).getChar();
+      if (char.isInAnyCar()) {
+        const pos = char.getCoordinates();
+        char.warpFromCarToCoord(pos.x, pos.y, pos.z);
+        wait(0);
+      }
+    }
+    activePlayerCar.delete();
+    activePlayerCar = null;
+  }
+}
+
+// Clean up ghosts/blips between rounds WITHOUT touching the player car
+function roundCleanup() {
+  for (const g of activeGhosts) {
+    if (g.blip)    g.blip.remove();
+    if (g.wpBlips) for (const b of g.wpBlips) b.remove();
+    if (g.driver)  g.driver.delete();
+    if (g.car)     g.car.delete();
+  }
+  activeGhosts = [];
+  if (activeCpBlip)   { activeCpBlip.remove();   activeCpBlip   = null; }
+  if (activeCpMarker) { activeCpMarker.delete(); activeCpMarker = null; }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SPAWN GHOSTS  (appends to activeGhosts)
+// ════════════════════════════════════════════════════════════════
+
+function buildRoadPath(waypoints) {
+  // Snap each waypoint to nearest road node, deduplicate adjacent duplicates
+  const path = [];
+  for (const wp of waypoints) {
+    const n = Path.GetClosestCarNodeWithHeading(wp.x, wp.y, wp.z);
+    const last = path[path.length - 1];
+    // Skip if same node as previous (dedup)
+    if (last && Math.abs(n.nodeX - last.x) < 0.5 && Math.abs(n.nodeY - last.y) < 0.5) continue;
+    path.push({ x: n.nodeX, y: n.nodeY, z: n.nodeZ });
+  }
+  return path;
+}
+
+function spawnGhosts(recordings) {
+  for (let i = 0; i < recordings.length; i++) {
+    const entry = recordings[i];
+    const rawRec = entry.waypoints;
+    if (!rawRec || rawRec.length < 2) continue;
+
+    // Build road-snapped path
+    const rec = buildRoadPath(rawRec);
+    if (rec.length < 2) continue;
+
+    const start = rec[0];
+    const ghostModel = entry.carModel || CFG.CAR_MODELS[0];
+    const car   = spawnCarSync(ghostModel, start.x, start.y, start.z);
+    if (!car) continue;
+
+    car.setProofs(true, true, true, false, false);
+    car.changeColor(CFG.GHOST_COLORS[i % CFG.GHOST_COLORS.length][0],
+                    CFG.GHOST_COLORS[i % CFG.GHOST_COLORS.length][1]);
+
+    const driver = Char.CreateRandomAsDriver(car);
+    if (!driver) { car.delete(); continue; }
+    wait(0);
+
+    // Issue first waypoint
+    Task.CarDriveToCoord(driver, car, rec[1].x, rec[1].y, rec[1].z, 30.0, 0, 0, 6);
+
+    const blip = Blip.AddForCar(car);
+    blip.changeColor(1);
+    blip.changeScale(1);
+
+    activeGhosts.push({ car, driver, blip, rec, wpBlips: [], wpIdx: 1 });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SINGLE ROUND
+// ════════════════════════════════════════════════════════════════
+
+function runRound(round, totalRounds, recordings, prevCar) {
+  const cp       = CFG.CHECKPOINTS[round];
+  const spawnCfg = CFG.SPAWNS[round];
+  const carModel = CFG.CAR_MODELS[Math.floor(Math.random() * CFG.CAR_MODELS.length)];
+  const player   = new Player(0);
+  const char     = player.getChar();
+
+  // Snap checkpoint to nearest road node
+  const cpNode = Path.GetClosestCarNodeWithHeading(cp.x, cp.y, cp.z);
+  const cpX = cpNode.nodeX, cpY = cpNode.nodeY, cpZ = cpNode.nodeZ;
+
+  // Snap spawn to nearest road node
+  const spNode = Path.GetClosestCarNodeWithHeading(spawnCfg.x, spawnCfg.y, spawnCfg.z);
+  const spX = spNode.nodeX, spY = spNode.nodeY, spZ = spNode.nodeZ;
+
+  // Spawn new car at spawn point
+  activePlayerCar = spawnCarSync(carModel, spX, spY, spZ);
+  if (!activePlayerCar) return { type: "DEAD", recording: [], roundTime: 0 };
+  activePlayerCar.setHeading(spawnCfg.heading !== undefined ? spawnCfg.heading : spNode.angle);
+
+  // Delete old car first so camera detaches, then eject on foot, then warp into new car
+  if (prevCar) {
+    if (char.isInCar(prevCar)) {
+      char.warpFromCarToCoord(spX, spY, spZ);
+      wait(0);
+    }
+    prevCar.delete();
+    wait(0);
+  } else if (char.isInAnyCar()) {
+    char.warpFromCarToCoord(spX, spY, spZ);
+    wait(0);
+  }
+  char.warpIntoCar(activePlayerCar);
+
+  player.clearWantedLevel();
+
+  activeCpBlip = Blip.AddForCoord(cpX, cpY, cpZ);
+  activeCpBlip.changeColor(2);
+  activeCpBlip.changeScale(2);
+
+  activeCpMarker = Checkpoint.Create(1, cpX, cpY, cpZ, cpX, cpY, cpZ, 6.0);
+
+  spawnGhosts(recordings);
+
+  if (round === 0) {
+    showTextBox("~y~Round 1/" + totalRounds + "~n~~w~Reach: " + cp.name);
+  } else {
+    showTextBox("~y~Round " + (round + 1) + "/" + totalRounds + " | " + activeGhosts.length + " ghost(s)~n~~w~Reach: " + cp.name);
+  }
+  wait(1500);
+  showTextBox("~g~GO!");
+  wait(200);
+
+  const thisRec  = [];
+  const startPos = activePlayerCar.getCoordinates();
+  thisRec.push({ x: startPos.x, y: startPos.y, z: startPos.z });
+  let recTimer   = 0;
+  let lastTick   = 0;
+  TIMERA = 0;
+
+  let f6d = false;
+  let result = null;
+
+  while (!result) {
+    wait(0);
+
+    const f6n = Pad.IsKeyPressed(VK_F6);
+    if (f6n && !f6d) { result = "STOP"; break; }
+    f6d = f6n;
+
+    const now = TIMERA;
+    const dt  = now - lastTick;
+    lastTick  = now;
+    recTimer  += dt;
+
+    const timeLeft = CFG.TIME_LIMIT_MS - now;
+    if (timeLeft <= 10000) {
+      showTextBox("~r~TIME: " + Math.ceil(timeLeft / 1000) + "s");
+    }
+    if (timeLeft <= 0)                             { result = "TIMEOUT"; break; }
+    if (player.isDead() || char.hasBeenArrested()) { result = "DEAD";    break; }
+
+    if (recTimer >= CFG.RECORD_EVERY_MS && thisRec.length < CFG.MAX_WAYPOINTS) {
+      recTimer = 0;
+      const p = activePlayerCar.getCoordinates();
+      thisRec.push({ x: p.x, y: p.y, z: p.z });
+    }
+
+    for (const g of activeGhosts) {
+      if (!g.car || !g.driver || !g.rec) continue;
+
+      const gp = g.car.getCoordinates();
+      const wp = g.rec[g.wpIdx];
+      if (dist2(gp.x, gp.y, wp.x, wp.y) < 8.0) {
+        g.wpIdx = (g.wpIdx + 1) % g.rec.length;
+        if (g.wpIdx === 0) g.car.setCoordinates(g.rec[0].x, g.rec[0].y, g.rec[0].z);
+        const next = g.rec[g.wpIdx];
+        Task.CarDriveToCoord(g.driver, g.car, next.x, next.y, next.z, 30.0, 0, 0, 6);
+      }
+    }
+
+    const pp = char.getCoordinates();
+    if (dist2(pp.x, pp.y, cpX, cpY) < CFG.ARRIVAL_RADIUS) {
+      if (activePlayerCar) activePlayerCar.freezePosition(true);
+      result = "WIN_ROUND";
+      break;
+    }
+  }
+
+  // Clean ghosts/blips but keep player car alive for next round transition
+  roundCleanup();
+  return { type: result, recording: thisRec, cpX, cpY, cpZ, carModel, car: activePlayerCar, roundTime: TIMERA };
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FULL GAME
+// ════════════════════════════════════════════════════════════════
+
+function formatTime(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m + "m " + String(s).padStart(2, "0") + "s";
+}
+
+function endGame(reason, round, totalRounds, elapsedMs) {
+  // Eject player safely before deleting car
+  const char = new Player(0).getChar();
+  if (char.isInAnyCar()) {
+    const pos = char.getCoordinates();
+    char.warpFromCarToCoord(pos.x, pos.y, pos.z);
+    wait(0);
+  }
+  globalCleanup(false);
+  World.SetCarDensityMultiplier(1.0);
+  World.SetPedDensityMultiplier(1.0);
+
+  const timeStr = formatTime(elapsedMs);
+  if (reason === "WIN") {
+    showTextBox("~g~YOU WIN!~n~~w~Time: " + timeStr);
+  } else if (reason === "TIMEOUT") {
+    showTextBox("~r~TIME'S UP!~n~~w~Rounds: " + round + "/" + totalRounds + "  Time: " + timeStr);
+  } else if (reason === "STOP") {
+    showTextBox("~w~Stopped.~n~Rounds: " + round + "/" + totalRounds + "  Time: " + timeStr);
+  } else {
+    showTextBox("~r~GAME OVER~n~~w~Rounds: " + round + "/" + totalRounds + "  Time: " + timeStr);
+  }
+  wait(4000);
+}
+
+function runGame() {
+  globalCleanup(false);
+  stopRequested = false;
+
+  World.SetCarDensityMultiplier(0.0);
+  World.SetPedDensityMultiplier(0.0);
+
+  const totalRounds = Math.min(CFG.SPAWNS.length, CFG.CHECKPOINTS.length);
+  let round         = 0;
+  let recordings    = [];
+  let prevCar       = null;
+  let elapsedMs     = 0;
+
+  while (round < totalRounds) {
+    const result = runRound(round, totalRounds, recordings, prevCar);
+    elapsedMs += result.roundTime || 0;
+
+    if (result.type === "WIN_ROUND") {
+      recordings.push({ waypoints: result.recording, cpX: result.cpX, cpY: result.cpY, cpZ: result.cpZ, carModel: result.carModel });
+      prevCar = result.car;
+
+      if (round + 1 >= totalRounds) {
+        endGame("WIN", totalRounds, totalRounds, elapsedMs);
+        return;
+      }
+
+      showTextBox("~g~CHECKPOINT! " + (round + 1) + "/" + totalRounds);
+      wait(800);
+      round++;
+
+    } else if (result.type === "TIMEOUT") {
+      endGame("TIMEOUT", round, totalRounds, elapsedMs);
+      return;
+
+    } else if (result.type === "STOP") {
+      endGame("STOP", round, totalRounds, elapsedMs);
+      return;
+
+    } else {
+      endGame("DEAD", round, totalRounds, elapsedMs);
+      return;
+    }
+  }
+
+  World.SetCarDensityMultiplier(1.0);
+  World.SetPedDensityMultiplier(1.0);
+}
+
+
+// ════════════════════════════════════════════════════════════════
+//  ENTRY POINT
+// ════════════════════════════════════════════════════════════════
+
+const VK_F5    = 116;
+const VK_F6    = 117;
+const VK_F7    = 118;
+const VK_F8    = 119;
+const VK_F9    = 120;
+const VK_F10   = 121;
+const VK_F11   = 122;
+const VK_F12   = 123;
+const VK_K     = 75;
+const VK_T     = 84;
+const VK_LMB   = 1;
+
+// One entry per unique small town — center of official bounding box
+const TOWNS = [
+  { name: "Aldea Malvada",          x: -1324.8, y:  2556.9, z: 10.0 },
+  { name: "Angel Pine",             x: -2144.6, y: -2398.2, z: 30.0 },
+  { name: "Arco del Oeste",         x:  -746.6, y:  2396.9, z: 10.0 },
+  { name: "Back o Beyond",          x:  -744.3, y: -2248.6, z: 10.0 },
+  { name: "Bayside",                x: -2547.1, y:  2448.9, z: 10.0 },
+  { name: "Blueberry",              x:   227.1, y:   -34.0, z: 10.0 },
+  { name: "Dillimore",              x:   720.9, y:  -539.8, z: 10.0 },
+  { name: "El Castillo del Diablo", x:  -336.5, y:  2399.0, z: 10.0 },
+  { name: "El Quebrados",           x: -1508.7, y:  2638.2, z: 10.0 },
+  { name: "Fallen Tree",            x:  -622.3, y:  -539.3, z: 10.0 },
+  { name: "Fern Ridge",             x:   907.4, y:   -10.0, z: 10.0 },
+  { name: "Flint Range",            x:  -390.9, y: -1462.6, z: 10.0 },
+  { name: "Fort Carson",            x:  -126.3, y:  1023.4, z: 10.0 },
+  { name: "Green Palms",            x:   257.6, y:  1413.1, z: 10.0 },
+  { name: "Hampton Barns",          x:   682.5, y:   315.4, z: 10.0 },
+  { name: "Hankypanky Point",       x:  2668.1, y:   223.8, z: 10.0 },
+  { name: "Hilltop Farm",           x:  1072.0, y:  -334.1, z: 10.0 },
+  { name: "Las Barrancas",          x:  -822.7, y:  1516.7, z: 10.0 },
+  { name: "Las Brujas",             x:  -286.8, y:  2170.3, z: 10.0 },
+  { name: "Las Payasadas",          x:  -244.0, y:  2698.6, z: 10.0 },
+  { name: "Leafy Hollow",           x:  -991.3, y: -1729.0, z: 10.0 },
+  { name: "Lil' Probe Inn",         x:    31.8, y:  1420.5, z: 10.0 },
+  { name: "Montgomery",             x:  1285.5, y:   306.4, z: 10.0 },
+  { name: "North Rock",             x:  2527.9, y:  -518.9, z: 10.0 },
+  { name: "Octane Springs",         x:   501.5, y:  1441.8, z: 10.0 },
+  { name: "Palomino Creek",         x:  2368.6, y:    39.7, z: 10.0 },
+  { name: "Regular Tom",            x:  -341.2, y:  1802.8, z: 10.0 },
+  { name: "Shady Creeks",           x: -1523.7, y: -2207.6, z: 10.0 },
+  { name: "The Big Ear",            x:  -273.9, y:  1542.3, z: 10.0 },
+  { name: "The Farm",               x: -1058.9, y: -1052.2, z: 150.0 },
+  { name: "The Panopticon",         x:  -633.8, y:    11.4, z: 10.0 },
+  { name: "Valle Ocultado",         x:  -826.3, y:  2729.7, z: 10.0 },
+  { name: "Verdant Meadows",        x:   236.5, y:  2507.5, z: 10.0 },
+];
+
+// ════════════════════════════════════════════════════════════════
+//  KEY INPUT PATTERN — always follow this exact approach
+//
+//  RULE: Every key needs a global wasDown variable declared at
+//  module scope alongside all other wasDown vars. Never use local
+//  wasDown vars inside functions — they reset on every call,
+//  causing the key to fire immediately if still held.
+//
+//  RULE: Never use IsKeyJustPressed() — it causes crashes.
+//
+//  RULE: Never use keys that GTA SA consumes:
+//    - Arrow keys  → vehicle steering
+//    - O, P        → radio station change
+//    - L           → lock car
+//    - F1, F2      → open help menus (crashes)
+//    Safe keys: F5-F10, K, T, and other keys not bound in-game
+//
+//  PATTERN:
+//    // 1. declare at module scope:
+//    let myKeyWasDown = false;
+//
+//    // 2. in any loop:
+//    const myKeyNow        = Pad.IsKeyPressed(VK_MYKEY);
+//    const myKeyJustPressed = myKeyNow && !myKeyWasDown;
+//    myKeyWasDown           = myKeyNow;
+//    if (myKeyJustPressed) { /* handle */ }
+// ════════════════════════════════════════════════════════════════
+
+
+let f5WasDown  = false;
+let f6WasDown  = false;
+let f7WasDown  = false;
+let kWasDown   = false;
+let lmbWasDown = false;
+let tWasDown   = false;
+let f8WasDown  = false;
+let f9WasDown  = false;
+let f10WasDown = false;
+let f11WasDown = false;
+let f12WasDown = false;
+
+// Creator mode state
+let creatorActive    = false;
+let creatorStep      = 0;
+let allCreatorBlips  = [];
+let creatorCps       = [];  // Checkpoint objects placed in creator
+
+// ════════════════════════════════════════════════════════════════
+//  ROUTE SAVE / LOAD  (IniFile)
+// ════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════
+//  ROUTE SAVE / LOAD  — single master file, one route per section
+//  File: CLEO\commute_routes.ini
+//  [meta]        count=N
+//  [routeN]      label=..., spawns=N, checkpoints=N
+//  [routeN_sI]   x=, y=, z=
+//  [routeN_cI]   x=, y=, z=, name=
+// ════════════════════════════════════════════════════════════════
+
+const MASTER_INI = "CLEO\\commute_routes.ini";
+
+function makeRouteLabel(townName) {
+  const t  = Clock.GetLocalTime();
+  const hh = String(t.hour).padStart(2,   "0");
+  const mm = String(t.minute).padStart(2, "0");
+  const ss = String(t.second).padStart(2, "0");
+  return townName + " " + hh + ":" + mm + ":" + ss;
+}
+
+function saveRoute(label) {
+  try {
+    const total = IniFile.ReadInt(MASTER_INI, "meta", "count") || 0;
+    const n     = total;
+    const sec   = "route" + n;
+    log("COMMUTE: saving route " + n + " label=" + label);
+    IniFile.WriteString(label,                  MASTER_INI, sec, "label");
+    IniFile.WriteInt(CFG.SPAWNS.length,         MASTER_INI, sec, "spawns");
+    IniFile.WriteInt(CFG.CHECKPOINTS.length,    MASTER_INI, sec, "checkpoints");
+    for (let i = 0; i < CFG.SPAWNS.length; i++) {
+      const s = CFG.SPAWNS[i];
+      const ss2 = sec + "_s" + i;
+      IniFile.WriteFloat(s.x,                  MASTER_INI, ss2, "x");
+      IniFile.WriteFloat(s.y,                  MASTER_INI, ss2, "y");
+      IniFile.WriteFloat(s.z,                  MASTER_INI, ss2, "z");
+      IniFile.WriteFloat(s.heading || 0.0,     MASTER_INI, ss2, "heading");
+    }
+    for (let i = 0; i < CFG.CHECKPOINTS.length; i++) {
+      const c   = CFG.CHECKPOINTS[i];
+      const cs  = sec + "_c" + i;
+      IniFile.WriteFloat(c.x,     MASTER_INI, cs, "x");
+      IniFile.WriteFloat(c.y,     MASTER_INI, cs, "y");
+      IniFile.WriteFloat(c.z,     MASTER_INI, cs, "z");
+      IniFile.WriteString(c.name, MASTER_INI, cs, "name");
+    }
+    IniFile.WriteInt(total + 1, MASTER_INI, "meta", "count");
+    log("COMMUTE: save done. total routes=" + (total + 1));
+    showTextBox("~g~Saved as: " + label);
+  } catch(e) {
+    log("COMMUTE: save ERROR: " + e);
+    showTextBox("~r~Save failed: " + e);
+  }
+}
+
+function loadRouteByIndex(n, char) {
+  try {
+    const sec = "route" + n;
+    const ns  = IniFile.ReadInt(MASTER_INI, sec, "spawns")      || 0;
+    const nc  = IniFile.ReadInt(MASTER_INI, sec, "checkpoints") || 0;
+    log("COMMUTE: loadRoute " + n + " ns=" + ns + " nc=" + nc);
+    CFG.SPAWNS.length      = 0;
+    CFG.CHECKPOINTS.length = 0;
+    for (let i = 0; i < ns; i++) {
+      const ss2 = sec + "_s" + i;
+      CFG.SPAWNS.push({
+        x:       IniFile.ReadFloat(MASTER_INI, ss2, "x")       || 0,
+        y:       IniFile.ReadFloat(MASTER_INI, ss2, "y")       || 0,
+        z:       IniFile.ReadFloat(MASTER_INI, ss2, "z")       || 0,
+        heading: IniFile.ReadFloat(MASTER_INI, ss2, "heading") || 0,
+      });
+    }
+    for (let i = 0; i < nc; i++) {
+      const cs = sec + "_c" + i;
+      CFG.CHECKPOINTS.push({
+        x:    IniFile.ReadFloat(MASTER_INI,  cs, "x")    || 0,
+        y:    IniFile.ReadFloat(MASTER_INI,  cs, "y")    || 0,
+        z:    IniFile.ReadFloat(MASTER_INI,  cs, "z")    || 0,
+        name: IniFile.ReadString(MASTER_INI, cs, "name") || ("CP " + i),
+      });
+    }
+    if (CFG.SPAWNS.length > 0) {
+      log("COMMUTE: route loaded, " + ns + " spawns " + nc + " checkpoints");
+    }
+    showTextBox("~g~Loaded: " + ns + " spawns, " + nc + " checkpoints.");
+  } catch(e) {
+    log("COMMUTE: load ERROR: " + e);
+    showTextBox("~r~Load failed: " + e);
+  }
+}
+
+function loadRouteMenu(char) {
+  let total;
+  try { total = IniFile.ReadInt(MASTER_INI, "meta", "count") || 0; }
+  catch(e) { total = 0; }
+  log("COMMUTE: loadRouteMenu total=" + total);
+
+  if (total === 0) {
+    showTextBox("~r~No saved routes yet. Press F11 to save one first.");
+    return;
+  }
+
+  let sel      = 0;
+  f8WasDown  = false;
+  f9WasDown  = false;
+  f11WasDown = false;
+  f12WasDown = false;
+
+  function menuHint() {
+    const label = IniFile.ReadString(MASTER_INI, "route" + sel, "label") || ("Route " + sel);
+    showTextBox("~y~LOAD ROUTE ~w~" + (sel+1) + "/" + total + "~n~" + label + "~n~F8/F9=prev/next  F12=load  F11=cancel");
+  }
+  menuHint();
+
+  while (true) {
+    wait(0);
+    const f8Now  = Pad.IsKeyPressed(VK_F8);
+    const f9Now  = Pad.IsKeyPressed(VK_F9);
+    const f11Now = Pad.IsKeyPressed(VK_F11);
+    const f12Now = Pad.IsKeyPressed(VK_F12);
+
+    if (f8Now  && !f8WasDown)  { sel = (sel - 1 + total) % total; menuHint(); }
+    if (f9Now  && !f9WasDown)  { sel = (sel + 1) % total;          menuHint(); }
+    if (f12Now && !f12WasDown) { loadRouteByIndex(sel, char); break; }
+    if (f11Now && !f11WasDown) { showTextBox("~w~Load cancelled."); break; }
+
+    f8WasDown  = f8Now;
+    f9WasDown  = f9Now;
+    f11WasDown = f11Now;
+    f12WasDown = f12Now;
+  }
+}
+
+
+function creatorHint(townSel) {
+  const step = creatorStep === 0 ? "~g~K/LMB=SPAWN" : "~y~K/LMB=DEST";
+  showTextBox(
+    "~y~CREATOR ~w~" + CFG.SPAWNS.length + "sp/" + CFG.CHECKPOINTS.length + "cp  " + step +
+    "~n~~w~" + TOWNS[townSel].name + "  F8/F9=town  F10=reset  F11=save  F7=exit" +
+    "~n~~w~WASD=move  Q/E=up/down  arrows=rotate"
+  );
+}
+
+// Alphabet + digits + space available for name input
+const NAME_CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+// VK codes for A-Z (65-90), 0-9 (48-57), space (32), backspace (8), escape (27)
+const VK_BACKSPACE = 8;
+const VK_ESCAPE    = 27;
+
+function promptRouteName(defaultName) {
+  let name = "";
+  // Track wasDown for every key we'll poll
+  const tracked = {};
+  function isJust(vk) {
+    const now = Pad.IsKeyPressed(vk);
+    const just = now && !tracked[vk];
+    tracked[vk] = now;
+    return just;
+  }
+  // Drain all keys first
+  for (let i = 0; i < 5; i++) wait(0);
+
+  function render() {
+    showTextBox(
+      "~y~NAME ROUTE~n~~w~" + (name || "~w~(empty=default)") +
+      "_~n~~w~Enter=confirm  Backspace=del  Esc=use default"
+    );
+  }
+  render();
+
+  while (true) {
+    wait(0);
+    // Backspace
+    if (isJust(VK_BACKSPACE) && name.length > 0) { name = name.slice(0, -1); render(); }
+    // Escape — use default
+    if (isJust(VK_ESCAPE)) { return defaultName; }
+    // Enter — confirm
+    if (isJust(VK_ENTER))  { return name.trim().length > 0 ? name.trim() : defaultName; }
+
+    // Letters A-Z (shift not needed — just caps)
+    for (let c = 65; c <= 90; c++) {
+      if (isJust(c) && name.length < 28) { name += String.fromCharCode(c); render(); }
+    }
+    // Digits 0-9
+    for (let c = 48; c <= 57; c++) {
+      if (isJust(c) && name.length < 28) { name += String.fromCharCode(c); render(); }
+    }
+    // Space (VK 32)
+    if (isJust(32) && name.length < 28) { name += " "; render(); }
+    // Hyphen (VK 189) and underscore (VK 189 + shift — skip, just use hyphen)
+    if (isJust(189) && name.length < 28) { name += "-"; render(); }
+  }
+}
+
+const VK_W = 87; const VK_A = 65; const VK_S = 83; const VK_D = 68;
+const VK_Q = 81; const VK_E = 69;
+const VK_LEFT = 37; const VK_RIGHT = 39; const VK_UP = 38; const VK_DOWN = 40;
+
+function runCreatorMode() {
+  creatorActive = true;
+  creatorStep   = 0;
+
+  CFG.SPAWNS.length      = 0;
+  CFG.CHECKPOINTS.length = 0;
+
+  const player   = new Player(0);
+  const char     = player.getChar();
+  let spawnIndex = 0;
+  let destIndex  = 0;
+  const allBlips = [];
+  let townSel    = 0;
+  let townNode   = Path.GetClosestCarNodeWithHeading(TOWNS[0].x, TOWNS[0].y, TOWNS[0].z);
+  let hintTimer  = 0;
+
+  // Reset all wasDown
+  f7WasDown  = true;
+  kWasDown   = false;
+  lmbWasDown = false;
+  f8WasDown  = false;
+  f9WasDown  = false;
+  f10WasDown = false;
+  f11WasDown = false;
+
+  // Init camera at player position
+  const startPos = char.getCoordinates();
+  let camX = startPos.x;
+  let camY = startPos.y;
+  let camZ = startPos.z + 10.0;
+  let camYaw   = 0.0;   // degrees, 0=north, clockwise
+  let camPitch = -20.0; // degrees, negative = looking down
+
+  // Disable player control — camera takes over
+  player.setControl(false);
+  Camera.SetFixedPosition(camX, camY, camZ, 0, 0, 1);
+
+  // Wait for F7 to be released
+  while (Pad.IsKeyPressed(VK_F7)) wait(0);
+  f7WasDown = false;
+
+  // Live cursor — raw camera position, no road snapping
+  const initGZ = World.GetGroundZFor3DCoord(camX, camY, camZ);
+  let cursorCp = Checkpoint.Create(1, camX, camY, initGZ, camX, camY, initGZ + 1.0, 3.0);
+  let lastCursorX = camX, lastCursorY = camY;
+
+  creatorHint(townSel);
+
+  while (creatorActive) {
+    wait(0);
+
+    hintTimer++;
+    if (hintTimer > 60) { hintTimer = 0; creatorHint(townSel); }
+
+    // ── Camera movement ──────────────────────────────────────────
+    const MOVE_SPEED  = 1.0;
+    const ROT_SPEED   = 1.5;
+    const VERT_SPEED  = 0.8;
+
+    // Arrow keys: left/right = yaw, up/down = pitch
+    if (Pad.IsKeyPressed(VK_LEFT))  camYaw   -= ROT_SPEED;
+    if (Pad.IsKeyPressed(VK_RIGHT)) camYaw   += ROT_SPEED;
+    if (Pad.IsKeyPressed(VK_UP))    camPitch += ROT_SPEED;
+    if (Pad.IsKeyPressed(VK_DOWN))  camPitch -= ROT_SPEED;
+    camPitch = Math.max(-89, Math.min(-1, camPitch));
+
+    // WASD horizontal movement relative to yaw
+    const yawRad = camYaw * Math.PI / 180;
+    const fwdX   =  Math.sin(yawRad);
+    const fwdY   =  Math.cos(yawRad);
+
+    if (Pad.IsKeyPressed(VK_W)) { camX += fwdX * MOVE_SPEED; camY += fwdY * MOVE_SPEED; }
+    if (Pad.IsKeyPressed(VK_S)) { camX -= fwdX * MOVE_SPEED; camY -= fwdY * MOVE_SPEED; }
+    if (Pad.IsKeyPressed(VK_A)) { camX -= fwdY * MOVE_SPEED; camY += fwdX * MOVE_SPEED; }
+    if (Pad.IsKeyPressed(VK_D)) { camX += fwdY * MOVE_SPEED; camY -= fwdX * MOVE_SPEED; }
+    if (Pad.IsKeyPressed(VK_Q)) { camZ -= VERT_SPEED; }
+    if (Pad.IsKeyPressed(VK_E)) { camZ += VERT_SPEED; }
+
+    // Compute look-at target from yaw + pitch
+    const pitchRad = camPitch * Math.PI / 180;
+    const lookDist = 10.0;
+    const tgtX = camX + Math.sin(yawRad) * Math.cos(pitchRad) * lookDist;
+    const tgtY = camY + Math.cos(yawRad) * Math.cos(pitchRad) * lookDist;
+    const tgtZ = camZ + Math.sin(pitchRad) * lookDist;
+
+    Camera.SetFixedPosition(camX, camY, camZ, 0, 0, 1);
+    Camera.PointAtPoint(tgtX, tgtY, tgtZ, 2);
+
+    // Update cursor if camera moved significantly
+    if (Math.abs(camX - lastCursorX) > 0.5 || Math.abs(camY - lastCursorY) > 0.5) {
+      lastCursorX = camX; lastCursorY = camY;
+      cursorCp.delete();
+      const gz = World.GetGroundZFor3DCoord(camX, camY, camZ);
+      cursorCp = Checkpoint.Create(1, camX, camY, gz, camX, camY, gz + 1.0, 3.0);
+    }
+
+    // ── Keys ─────────────────────────────────────────────────────
+    const kDown          = Pad.IsKeyPressed(VK_K);
+    const lmbDown        = Pad.IsKeyPressed(VK_LMB);
+    const kOnlyPressed   = kDown && !kWasDown;
+    const lmbOnlyPressed = lmbDown && !lmbWasDown;
+    kWasDown             = kDown;
+    lmbWasDown           = lmbDown;
+
+    const f7Down        = Pad.IsKeyPressed(VK_F7);
+    const f7Just        = f7Down && !f7WasDown;
+    f7WasDown           = f7Down;
+
+    const f8Down        = Pad.IsKeyPressed(VK_F8);
+    const f8Just        = f8Down && !f8WasDown;
+    f8WasDown           = f8Down;
+
+    const f9Down        = Pad.IsKeyPressed(VK_F9);
+    const f9Just        = f9Down && !f9WasDown;
+    f9WasDown           = f9Down;
+
+    const f10Down       = Pad.IsKeyPressed(VK_F10);
+    const f10Just       = f10Down && !f10WasDown;
+    f10WasDown          = f10Down;
+
+    const f11Down       = Pad.IsKeyPressed(VK_F11);
+    const f11Just       = f11Down && !f11WasDown;
+    f11WasDown          = f11Down;
+
+    if (f7Just) {
+      if (CFG.SPAWNS.length === 0) {
+        break;
+      } else {
+        // Drain F7 first so it doesn't bleed into the decision loop
+        while (Pad.IsKeyPressed(VK_F7)) wait(0);
+        showTextBox("~y~EXIT CREATOR~n~~w~F11=save & exit  F12=discard & exit  F7=cancel");
+        let f11d = true, f12d = true, f7d = true;
+        let decided = false;
+        while (!decided) {
+          wait(0);
+          const f11n = Pad.IsKeyPressed(VK_F11);
+          const f12n = Pad.IsKeyPressed(VK_F12);
+          const f7n  = Pad.IsKeyPressed(VK_F7);
+          if (f11n && !f11d) {
+            const defaultLabel = makeRouteLabel(TOWNS[townSel].name);
+            const label = promptRouteName(defaultLabel);
+            saveRoute(label);
+            decided = true; creatorActive = false;
+          } else if (f12n && !f12d) {
+            decided = true; creatorActive = false;
+          } else if (f7n && !f7d) {
+            decided = true; // cancel
+          }
+          f11d = f11n; f12d = f12n; f7d = f7n;
+        }
+        if (!creatorActive) break;
+        while (Pad.IsKeyPressed(VK_F7)) wait(0);
+        f7WasDown = true;
+        creatorHint(townSel);
+      }
+    }
+
+    if (f11Just) {
+      if (CFG.SPAWNS.length === 0) {
+        showTextBox("~r~Nothing to save — place at least one spawn first.");
+      } else {
+        const defaultLabel = makeRouteLabel(TOWNS[townSel].name);
+        const label = promptRouteName(defaultLabel);
+        saveRoute(label);
+        creatorActive = false;
+        break;
+      }
+    }
+
+    if (f8Just) {
+      townSel  = (townSel - 1 + TOWNS.length) % TOWNS.length;
+      townNode = Path.GetClosestCarNodeWithHeading(TOWNS[townSel].x, TOWNS[townSel].y, TOWNS[townSel].z);
+      creatorHint(townSel);
+    }
+    if (f9Just) {
+      townSel  = (townSel + 1) % TOWNS.length;
+      townNode = Path.GetClosestCarNodeWithHeading(TOWNS[townSel].x, TOWNS[townSel].y, TOWNS[townSel].z);
+      creatorHint(townSel);
+    }
+    if (f10Just) {
+      camX = TOWNS[townSel].x;
+      camY = TOWNS[townSel].y;
+      camZ = TOWNS[townSel].z + 20.0;
+      camYaw = 0.0; camPitch = -30.0;
+      lastCursorX = camX; lastCursorY = camY;
+      cursorCp.delete();
+      const gz2 = World.GetGroundZFor3DCoord(camX, camY, camZ);
+      cursorCp = Checkpoint.Create(1, camX, camY, gz2, camX, camY, gz2 + 1.0, 3.0);
+      for (const b of allBlips) b.remove();
+      allBlips.length = 0;
+      for (const b of allCreatorBlips) b.remove();
+      allCreatorBlips.length = 0;
+      for (const cp of creatorCps) cp.delete();
+      creatorCps.length = 0;
+      CFG.SPAWNS.length      = 0;
+      CFG.CHECKPOINTS.length = 0;
+      spawnIndex  = 0;
+      destIndex   = 0;
+      creatorStep = 0;
+      creatorHint(townSel);
+    }
+
+    // ── Placement ────────────────────────────────────────────────
+    if (kOnlyPressed || lmbOnlyPressed) {
+      const gz   = World.GetGroundZFor3DCoord(camX, camY, camZ);
+      const node = Path.GetClosestCarNodeWithHeading(camX, camY, gz);
+
+      if (creatorStep === 0) {
+        const nx = node.nodeX, ny = node.nodeY, nz = node.nodeZ;
+        const b = Blip.AddForCoord(nx, ny, nz);
+        b.changeColor(2); b.changeScale(2);
+        allBlips.push(b); allCreatorBlips.push(b);
+        creatorCps.push(Checkpoint.Create(1, nx, ny, nz, nx, ny, nz + 1.0, 4.0));
+        CFG.SPAWNS[spawnIndex] = { x: nx, y: ny, z: nz, heading: camYaw };
+        spawnIndex++;
+        creatorStep = 1;
+      } else {
+        let nx, ny, nz;
+        if (kOnlyPressed && destIndex >= 1) {
+          const prev = CFG.CHECKPOINTS[destIndex - 1];
+          nx = prev.x; ny = prev.y; nz = prev.z;
+        } else {
+          nx = node.nodeX; ny = node.nodeY; nz = node.nodeZ;
+        }
+        const b = Blip.AddForCoord(nx, ny, nz);
+        b.changeColor(1); b.changeScale(2);
+        allBlips.push(b); allCreatorBlips.push(b);
+        creatorCps.push(Checkpoint.Create(1, nx, ny, nz, nx, ny, nz + 1.0, 4.0));
+        CFG.CHECKPOINTS[destIndex] = { x: nx, y: ny, z: nz, name: "CP " + destIndex };
+        destIndex++;
+        creatorStep = 0;
+        // Move camera to next spawn if already placed
+        const nextSpawn = CFG.SPAWNS[spawnIndex];
+        if (nextSpawn) {
+          camX = nextSpawn.x;
+          camY = nextSpawn.y;
+          camZ = nextSpawn.z + 15.0;
+          camPitch = -30.0;
+        }
+      }
+      creatorHint(townSel);
+    }
+  }
+
+  // Restore
+  creatorActive = false;
+  cursorCp.delete();
+  for (const b of allBlips) b.remove();
+  allBlips.length = 0;
+  for (const b of allCreatorBlips) b.remove();
+  allCreatorBlips = [];
+  player.setControl(true);
+  Camera.Restore();
+  wait(0);
+  for (const cp of creatorCps) cp.delete();
+  creatorCps.length = 0;
+  showTextBox("~w~Creator exited. " + CFG.SPAWNS.length + " spawns, " + CFG.CHECKPOINTS.length + " checkpoints.");
+}
+
+const VK_ENTER = 13;
+
+// ════════════════════════════════════════════════════════════════
+//  MENU HELPERS  — textbox + arrow key navigation
+//  UP/DOWN=move  ENTER=confirm
+// ════════════════════════════════════════════════════════════════
+
+function showNativeMenu(header, items) {
+  let sel = 0;
+  let upD = false, downD = false, enterD = false;
+
+  while (Pad.IsKeyPressed(VK_UP) || Pad.IsKeyPressed(VK_DOWN) || Pad.IsKeyPressed(VK_ENTER)) wait(0);
+
+  function renderMenu() {
+    let txt = "~y~" + header + "~n~";
+    for (let i = 0; i < items.length; i++) {
+      txt += (i === sel ? "~g~> " : "~w~  ") + items[i] + "~n~";
+    }
+    showTextBox(txt);
+  }
+  renderMenu();
+
+  while (true) {
+    wait(0);
+    const upN    = Pad.IsKeyPressed(VK_UP);
+    const downN  = Pad.IsKeyPressed(VK_DOWN);
+    const enterN = Pad.IsKeyPressed(VK_ENTER);
+
+    if (upN    && !upD)    { sel = (sel - 1 + items.length) % items.length; renderMenu(); }
+    if (downN  && !downD)  { sel = (sel + 1) % items.length;                renderMenu(); }
+    if (enterN && !enterD) { return sel; }
+
+    upD = upN; downD = downN; enterD = enterN;
+  }
+}
+
+function deleteRouteByIndex(n) {
+  try {
+    let total = IniFile.ReadInt(MASTER_INI, "meta", "count") || 0;
+    // Shift all routes above n down by one
+    for (let i = n; i < total - 1; i++) {
+      const src = "route" + (i + 1);
+      const dst = "route" + i;
+      IniFile.WriteString(IniFile.ReadString(MASTER_INI, src, "label") || "", MASTER_INI, dst, "label");
+      const ns = IniFile.ReadInt(MASTER_INI, src, "spawns") || 0;
+      const nc = IniFile.ReadInt(MASTER_INI, src, "checkpoints") || 0;
+      IniFile.WriteInt(ns, MASTER_INI, dst, "spawns");
+      IniFile.WriteInt(nc, MASTER_INI, dst, "checkpoints");
+      for (let s = 0; s < ns; s++) {
+        const ss = src + "_s" + s, ds = dst + "_s" + s;
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI, ss, "x") || 0,       MASTER_INI, ds, "x");
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI, ss, "y") || 0,       MASTER_INI, ds, "y");
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI, ss, "z") || 0,       MASTER_INI, ds, "z");
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI, ss, "heading") || 0, MASTER_INI, ds, "heading");
+      }
+      for (let c = 0; c < nc; c++) {
+        const sc = src + "_c" + c, dc = dst + "_c" + c;
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI,  sc, "x")    || 0,  MASTER_INI, dc, "x");
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI,  sc, "y")    || 0,  MASTER_INI, dc, "y");
+        IniFile.WriteFloat(IniFile.ReadFloat(MASTER_INI,  sc, "z")    || 0,  MASTER_INI, dc, "z");
+        IniFile.WriteString(IniFile.ReadString(MASTER_INI, sc, "name") || "", MASTER_INI, dc, "name");
+      }
+    }
+    IniFile.WriteInt(total - 1, MASTER_INI, "meta", "count");
+    log("COMMUTE: deleted route " + n + ", total now " + (total - 1));
+  } catch(e) {
+    log("COMMUTE: delete ERROR: " + e);
+  }
+}
+
+const VK_DELETE = 46;
+
+function showLoadRouteMenu() {
+  let total;
+  try { total = IniFile.ReadInt(MASTER_INI, "meta", "count") || 0; }
+  catch(e) { total = 0; }
+
+  if (total === 0) {
+    showTextBox("~r~No saved routes yet.~n~Use Route Creator to make one.");
+    wait(2000);
+    return false;
+  }
+
+  let sel = 0;
+  let upD = false, downD = false, enterD = false, delD = false;
+
+  while (Pad.IsKeyPressed(VK_UP) || Pad.IsKeyPressed(VK_DOWN) ||
+         Pad.IsKeyPressed(VK_ENTER) || Pad.IsKeyPressed(VK_DELETE)) wait(0);
+
+  function getLabels() {
+    const arr = [];
+    for (let i = 0; i < total; i++) {
+      arr.push(IniFile.ReadString(MASTER_INI, "route" + i, "label") || ("Route " + i));
+    }
+    return arr;
+  }
+
+  function render(labels) {
+    let txt = "~y~LOAD ROUTE ~w~(Del=delete)~n~";
+    for (let i = 0; i < labels.length; i++) {
+      txt += (i === sel ? "~g~> " : "~w~  ") + labels[i] + "~n~";
+    }
+    showTextBox(txt);
+  }
+
+  let labels = getLabels();
+  render(labels);
+
+  while (true) {
+    wait(0);
+    const upN    = Pad.IsKeyPressed(VK_UP);
+    const downN  = Pad.IsKeyPressed(VK_DOWN);
+    const enterN = Pad.IsKeyPressed(VK_ENTER);
+    const delN   = Pad.IsKeyPressed(VK_DELETE);
+
+    if (upN    && !upD)    { sel = (sel - 1 + total) % total; render(labels); }
+    if (downN  && !downD)  { sel = (sel + 1) % total;          render(labels); }
+
+    if (delN && !delD) {
+      deleteRouteByIndex(sel);
+      total--;
+      if (total === 0) {
+        showTextBox("~r~No routes left.");
+        wait(1500);
+        return false;
+      }
+      sel = Math.min(sel, total - 1);
+      labels = getLabels();
+      render(labels);
+    }
+
+    if (enterN && !enterD) {
+      const _lmPlayer = new Player(0);
+      _lmPlayer.setControl(false);
+      while (Pad.IsKeyPressed(VK_ENTER)) wait(0);
+      wait(100);
+      _lmPlayer.setControl(true);
+      const char = new Player(0).getChar();
+      loadRouteByIndex(sel, char);
+      return true;
+    }
+
+    upD = upN; downD = downN; enterD = enterN; delD = delN;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ENTRY POINT
+// ════════════════════════════════════════════════════════════════
+
+log("COMMUTE: script starting");
+wait(500);
+log("COMMUTE: wait done");
+showTextBox("~y~COMMUTE~n~~w~F5=menu  F6=stop");
+
+while (true) {
+  wait(0);
+
+  const f5Down        = Pad.IsKeyPressed(VK_F5);
+  const f5JustPressed = f5Down && !f5WasDown;
+  f5WasDown           = f5Down;
+
+  const f6Down        = Pad.IsKeyPressed(VK_F6);
+  const f6JustPressed = f6Down && !f6WasDown;
+  f6WasDown           = f6Down;
+
+  if (f6JustPressed) { stopRequested = true; continue; }
+  if (!f5JustPressed) continue;
+
+  log("COMMUTE: opening main menu");
+  const choice = showNativeMenu("COMMUTE", ["PLAY", "ROUTE CREATOR", "EXIT"]);
+  log("COMMUTE: choice=" + choice);
+
+  // Disable control immediately so Enter release doesn't eject from car
+  const _menuPlayer = new Player(0);
+  _menuPlayer.setControl(false);
+  while (Pad.IsKeyPressed(VK_ENTER)) wait(0);
+  wait(100);
+  _menuPlayer.setControl(true);
+
+  if (choice === 0) {
+    for (const b of allCreatorBlips) b.remove();
+    allCreatorBlips = [];
+    const loaded = showLoadRouteMenu();
+    if (loaded) {
+      if (CFG.SPAWNS.length === 0 || CFG.CHECKPOINTS.length === 0) {
+        showTextBox("~r~Route has no spawns or checkpoints.");
+        wait(1500);
+      } else {
+        runGame();
+      }
+    }
+
+  } else if (choice === 1) {
+    for (const b of allCreatorBlips) b.remove();
+    allCreatorBlips = [];
+    runCreatorMode();
+
+  } else if (choice === 2) {
+    globalCleanup(false);
+    World.SetCarDensityMultiplier(1.0);
+    World.SetPedDensityMultiplier(1.0);
+    showTextBox("~w~Commute stopped.");
+    wait(1500);
+  }
+}

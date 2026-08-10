@@ -721,7 +721,7 @@ function runStreamer(char) {
             }
             if (d.upgrades && d.upgrades.length > 0) {
               for (const m of d.upgrades) {
-                if (m >= 1000 && m <= 1193 && loadModelSync(m)) {
+                if (m >= 1000 && loadModelSync(m)) {
                   try {
                     if (typeof nc.addMod === 'function') nc.addMod(m);
                     else if (typeof Car !== 'undefined' && typeof Car.AddMod === 'function') Car.AddMod(nc, m);
@@ -1016,7 +1016,7 @@ function parseEntry(line) {
         if (upgradesPart) {
           for (const p of upgradesPart.split(",")) {
             const n = parseInt(p, 10);
-            if (n >= 1000 && n <= 1193) upgrades.push(n);
+            if (n >= 1000) upgrades.push(n);
           }
         }
         return {
@@ -1076,7 +1076,7 @@ function parseEntry(line) {
     if (uM && uM[1].trim() !== "None") {
       for (const p of uM[1].trim().split(/[;,]/)) {
         const n = parseInt(p, 10);
-        if (n >= 1000 && n <= 1193) upgrades.push(n);
+        if (n >= 1000) upgrades.push(n);
       }
     }
     const mid = parseInt(mM[1], 10);
@@ -1161,9 +1161,10 @@ function getCarMods(car, modelId) {
   for (let slot = 0; slot <= 14; slot++) {
     try {
       let id = 0;
-      if (typeof car.getCurrentMod === 'function') id = car.getCurrentMod(slot);
-      if (!id && typeof Car !== 'undefined' && typeof Car.GetCurrentMod === 'function') id = Car.GetCurrentMod(car, slot);
-      if (id && id >= 1000 && id <= 1193) mods.push(id);
+      if (typeof car.getModSlot === 'function') id = car.getModSlot(slot);
+      else if (typeof car.getCurrentMod === 'function') id = car.getCurrentMod(slot);
+      else if (typeof Car !== 'undefined' && typeof Car.GetModSlot === 'function') id = Car.GetModSlot(car, slot);
+      if (id && id >= 1000) mods.push(id);
     } catch(e) {}
   }
   return mods;
