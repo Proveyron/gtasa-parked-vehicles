@@ -613,6 +613,29 @@ function drainKeys() {
   ) wait(0);
 }
 
+function checkCheatCodes(player, char) {
+  try {
+    if (typeof Pad !== 'undefined' && typeof Pad.TestCheat === 'function') {
+      if (Pad.TestCheat("PACKER")) {
+        const pp = char.getCoordinates();
+        if (!pp) return;
+        const hdg = getCarHdg(char);
+        const rad = hdg * Math.PI / 180;
+        const spX = pp.x - Math.sin(rad) * 7.0;
+        const spY = pp.y + Math.cos(rad) * 7.0;
+        const spZ = pp.z;
+
+        const nc = spawnCarAt(443, spX, spY, spZ);
+        if (nc) {
+          try { nc.setHeading(hdg); } catch(e) {}
+          if (CFG.tooltips) showTextBox("~g~Cheat activated: ~y~Packer spawned!");
+          log("LOGGER: Cheat activated — spawned Packer (443) at " + spX.toFixed(1) + "," + spY.toFixed(1));
+        }
+      }
+    }
+  } catch(e) {}
+}
+
 function renderParkedMenu(entries, sel) {
   const total = entries ? entries.length : 0;
   if (total === 0) {
@@ -1551,6 +1574,8 @@ while (true) {
     }
     continue;
   }
+
+  checkCheatCodes(player, char);
 
   // ── F7: reload INI + re-stream ────────────────────────────────
   const f7Now = Pad.IsKeyPressed(VK_F7);
