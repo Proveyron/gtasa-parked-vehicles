@@ -64,7 +64,13 @@ const NON_TUNABLE_MODELS = [
   // Helicopters & Planes
   417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593,
   // Trailers, RC & Trains
-  435, 441, 450, 464, 465, 501, 537, 538, 564, 569, 570, 584, 590, 591, 594, 606, 607, 608, 610, 611
+  435, 441, 450, 464, 465, 501, 537, 538, 564, 569, 570, 584, 590, 591, 594, 606, 607, 608, 610, 611,
+  // Semi-Trucks (no tuning shop support — GET_CURRENT_CAR_MOD hangs on these)
+  403, 414, 443, 455, 514, 515, 524, 532, 578,
+  // Emergency & Government Vehicles (police, fire, ambulance, military)
+  407, 408, 416, 427, 428, 432, 433, 490, 528, 596, 597, 598, 599, 601,
+  // Industrial, Construction & Special
+  406, 410, 411, 423, 431, 437, 440, 449, 455, 456, 457, 470, 475, 486, 524, 532, 544, 556, 557, 574, 582, 583
 ];
 
 function isTunableVehicle(mid) {
@@ -970,6 +976,29 @@ function runPending(char) {
 // ════════════════════════════════════════════════════════════════
 //  SAVE CAR EXIT
 // ════════════════════════════════════════════════════════════════
+function formatMinifiedEntry(d) {
+  if (!d) return "";
+  const clrStr = (d.extraColor1 >= 0 && d.extraColor2 >= 0)
+               ? (d.primaryColor + "," + d.secondaryColor + "," + d.extraColor1 + "," + d.extraColor2)
+               : (d.primaryColor + "," + d.secondaryColor);
+  const pjStr = (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) ? d.paintjob : "";
+  const trStr = (d.tires && d.tires.length) ? d.tires.join(",") : "";
+  const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
+  const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
+  const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
+
+  return d.modelId + "|" +
+         d.x.toFixed(2) + "," + d.y.toFixed(2) + "," + d.z.toFixed(2) + "|" +
+         d.heading.toFixed(1) + "|" +
+         clrStr + "|" +
+         pjStr + "|" +
+         d.health + "|" +
+         trStr + "|" +
+         dmStr + "|" +
+         ddStr + "|" +
+         uStr;
+}
+
 function saveCarExit(car) {
   try {
     const player = new Player(0);
@@ -983,7 +1012,7 @@ function saveCarExit(car) {
       if (CFG.tooltips) showTextBox("~r~Vehicle health < 250!~n~~w~Exit position not saved.");
       return;
     }
-    const mid   = getCarModelId(car);
+    const mid = getCarModelId(car);
     if (mid <= 0) return;
 
     const cp     = getCarPos(car);
@@ -997,23 +1026,14 @@ function saveCarExit(car) {
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
 
-    const clrStr = (extraC.c3 >= 0 && extraC.c4 >= 0)
-                 ? (clrs.c1 + "," + clrs.c2 + "," + extraC.c3 + "," + extraC.c4)
-                 : (clrs.c1 + "," + clrs.c2);
-
-    const isGeneric = (!name || name === ("" + mid) || name.indexOf("Model ") === 0);
-    const line = "M:"  + mid +
-                 (!isGeneric ? ("|N:" + shortenLoc(name)) : "") +
-                 "|C:" + cp.x.toFixed(2) + "," + cp.y.toFixed(2) + "," + cp.z.toFixed(2) +
-                 "|H:" + hdg.toFixed(2) +
-                 "|Cl:" + clrStr +
-                 (pj >= 0 ? ("|P:" + pj) : "") +
-                 "|Hp:" + (CFG.saveHealth ? hp : 1000) +
-                 "|Tr:" + (CFG.saveTires && tires.length ? tires.join(";") : "None") +
-                 "|Dm:" + (dam.panels.length ? dam.panels.join(";") : "None") +
-                 "|Dd:" + (dam.doors.length ? dam.doors.join(";") : "None") +
-                 "|U:"  + (mods.length ? mods.join(";") : "None") +
-                 (loc ? ("|L:" + shortenLoc(loc)) : "");
+    const line = formatMinifiedEntry({
+      modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
+      primaryColor: clrs.c1, secondaryColor: clrs.c2,
+      extraColor1: extraC.c3, extraColor2: extraC.c4,
+      paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
+      tires: (CFG.saveTires ? tires : []),
+      panels: dam.panels, doors: dam.doors, upgrades: mods
+    });
 
     const ents = readDisk();
     ents.push(line);
@@ -1027,7 +1047,7 @@ function saveCarExit(car) {
 
     const hpText = CFG.saveHealth ? (" ~w~(" + hp + " HP)") : "";
     const trText = (CFG.saveTires && tires.length) ? (" ~r~[" + tires.length + " flat tire" + (tires.length > 1 ? "s" : "") + "]") : "";
-    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + loc + " | Health: " + hp + " HP | Tires: " + (tires.length ? tires.join(",") : "Intact") + " (" + line + ")");
+    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + loc + " | Health: " + hp + " HP (" + line + ")");
     if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + "~g~ at ~y~" + loc + hpText + trText);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
@@ -1039,45 +1059,120 @@ function saveCarExit(car) {
 // ════════════════════════════════════════════════════════════════
 function parseEntry(line) {
   if (!line || typeof line !== 'string') return null;
+  const s = line.trim();
+  if (!s || s.indexOf("[") === 0 || s.indexOf(";") === 0 || s.indexOf("#") === 0) return null;
+
   try {
-    const mM   = line.match(/(?:Model:|M:)(\d+)/);
-    const cM   = line.match(/(?:Coords:|C:)(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/);
+    // 1. Ultra-Minified Positional Format: mid|x,y,z|hdg|c1,c2,c3,c4|pj|hp|tires|panels|doors|mods
+    if (s.indexOf("|") !== -1 && s.indexOf("M:") === -1 && s.indexOf("Model:") === -1) {
+      const parts = s.split("|");
+      if (parts.length >= 3) {
+        const mid = parseInt(parts[0], 10);
+        if (isNaN(mid) || mid <= 0) return null;
+        const cParts = parts[1].split(",");
+        if (cParts.length < 3) return null;
+        const x = parseFloat(cParts[0]), y = parseFloat(cParts[1]), z = parseFloat(cParts[2]);
+
+        const hdg = parts[2] ? parseFloat(parts[2]) : 0;
+        const clrParts = parts[3] ? parts[3].split(",") : [];
+        const c1 = clrParts[0] !== undefined ? parseInt(clrParts[0], 10) : 0;
+        const c2 = clrParts[1] !== undefined ? parseInt(clrParts[1], 10) : 0;
+        const c3 = (clrParts.length >= 4 && clrParts[2] !== undefined) ? parseInt(clrParts[2], 10) : -1;
+        const c4 = (clrParts.length >= 4 && clrParts[3] !== undefined) ? parseInt(clrParts[3], 10) : -1;
+        const pj = parts[4] ? parseInt(parts[4], 10) : -1;
+        const hp = parts[5] ? parseInt(parts[5], 10) : 1000;
+
+        const tires = [];
+        if (parts[6]) {
+          for (const p of parts[6].split(",")) {
+            const n = parseInt(p, 10);
+            if (n >= 0 && n <= 5) tires.push(n);
+          }
+        }
+
+        const panels = [];
+        if (parts[7]) {
+          for (const p of parts[7].split(",")) {
+            const n = parseInt(p, 10);
+            if (n >= 0 && n <= 6) panels.push(n);
+          }
+        }
+
+        const doors = [];
+        if (parts[8]) {
+          for (const p of parts[8].split(",")) {
+            const n = parseInt(p, 10);
+            if (n >= 0 && n <= 5) doors.push(n);
+          }
+        }
+
+        const upgrades = [];
+        if (parts[9]) {
+          for (const p of parts[9].split(",")) {
+            const n = parseInt(p, 10);
+            if (n >= 1000 && n <= 1193) upgrades.push(n);
+          }
+        }
+
+        return {
+          modelId: mid,
+          name: getVehicleName(mid),
+          location: getMapLocation(x, y, z),
+          x: x, y: y, z: z,
+          heading: hdg,
+          primaryColor: c1,
+          secondaryColor: c2,
+          extraColor1: c3,
+          extraColor2: c4,
+          paintjob: pj,
+          health: hp,
+          tires: tires,
+          panels: panels,
+          doors: doors,
+          upgrades: upgrades,
+        };
+      }
+    }
+
+    // 2. Legacy Key-Value Tag Format (M:mid|...)
+    const mM   = s.match(/(?:Model:|M:)(\d+)/);
+    const cM   = s.match(/(?:Coords:|C:)(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/);
     if (!mM || !cM) return null;
-    const nM   = line.match(/(?:Name:|N:)([^|\r\n]+)/);
-    const locM = line.match(/(?:Location:|L:)([^|\r\n]+)/);
-    const hM   = line.match(/(?:Heading:|H:)(-?[\d.]+)/);
-    const clM  = line.match(/(?:Colors:|Cl:)(\d+),(\d+)(?:,(\d+),(\d+))?/);
-    const pjM  = line.match(/(?:Paintjob:|P:)(\d+)/);
-    const hpM  = line.match(/(?:Health:|Hp:)(\d+)/);
-    const trM  = line.match(/(?:Tires:|Tr:)([^|\r\n]+)/);
-    const dmM  = line.match(/(?:Panels:|Dm:)([^|\r\n]+)/);
-    const ddM  = line.match(/(?:Doors:|Dd:)([^|\r\n]+)/);
-    const uM   = line.match(/(?:Upgrades:|U:)([^|\r\n]+)/);
+    const nM   = s.match(/(?:Name:|N:)([^|\r\n]+)/);
+    const locM = s.match(/(?:Location:|L:)([^|\r\n]+)/);
+    const hM   = s.match(/(?:Heading:|H:)(-?[\d.]+)/);
+    const clM  = s.match(/(?:Colors:|Cl:)(\d+),(\d+)(?:,(\d+),(\d+))?/);
+    const pjM  = s.match(/(?:Paintjob:|P:)(\d+)/);
+    const hpM  = s.match(/(?:Health:|Hp:)(\d+)/);
+    const trM  = s.match(/(?:Tires:|Tr:)([^|\r\n]+)/);
+    const dmM  = s.match(/(?:Panels:|Dm:)([^|\r\n]+)/);
+    const ddM  = s.match(/(?:Doors:|Dd:)([^|\r\n]+)/);
+    const uM   = s.match(/(?:Upgrades:|U:)([^|\r\n]+)/);
     const paintjob = pjM ? parseInt(pjM[1], 10) : -1;
     const tires = [];
     if (trM && trM[1].trim() !== "None") {
-      for (const p of trM[1].trim().split(";")) {
+      for (const p of trM[1].trim().split(/[;,]/)) {
         const n = parseInt(p, 10);
         if (n >= 0 && n <= 5) tires.push(n);
       }
     }
     const panels = [];
     if (dmM && dmM[1].trim() !== "None") {
-      for (const p of dmM[1].trim().split(";")) {
+      for (const p of dmM[1].trim().split(/[;,]/)) {
         const n = parseInt(p, 10);
         if (n >= 0 && n <= 6) panels.push(n);
       }
     }
     const doors = [];
     if (ddM && ddM[1].trim() !== "None") {
-      for (const p of ddM[1].trim().split(";")) {
+      for (const p of ddM[1].trim().split(/[;,]/)) {
         const n = parseInt(p, 10);
         if (n >= 0 && n <= 5) doors.push(n);
       }
     }
     const upgrades = [];
     if (uM && uM[1].trim() !== "None") {
-      for (const p of uM[1].trim().split(";")) {
+      for (const p of uM[1].trim().split(/[;,]/)) {
         const n = parseInt(p, 10);
         if (n >= 1000 && n <= 1193) upgrades.push(n);
       }
@@ -1086,14 +1181,11 @@ function parseEntry(line) {
     const x   = parseFloat(cM[1]);
     const y   = parseFloat(cM[2]);
     const z   = parseFloat(cM[3]);
-    const name     = (nM && nM[1].trim()) ? nM[1].trim() : getVehicleName(mid);
-    const location = (locM && locM[1].trim()) ? locM[1].trim() : getMapLocation(x, y, z);
-    const health   = hpM ? parseInt(hpM[1], 10) : 1000;
 
     return {
       modelId:        mid,
-      name:           name,
-      location:       location,
+      name:           (nM && nM[1].trim()) ? nM[1].trim() : getVehicleName(mid),
+      location:       (locM && locM[1].trim()) ? locM[1].trim() : getMapLocation(x, y, z),
       x:              x,
       y:              y,
       z:              z,
@@ -1103,11 +1195,11 @@ function parseEntry(line) {
       extraColor1:    (clM && clM[3] !== undefined) ? parseInt(clM[3], 10) : -1,
       extraColor2:    (clM && clM[4] !== undefined) ? parseInt(clM[4], 10) : -1,
       paintjob:       paintjob,
-      health:         health,
+      health:         hpM ? parseInt(hpM[1], 10) : 1000,
       tires:          tires,
       panels:         panels,
       doors:          doors,
-      upgrades,
+      upgrades:       upgrades,
     };
   } catch(e) { return null; }
 }
@@ -1205,38 +1297,9 @@ function gatherAndUpdateAllOnStart() {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const d = parseEntry(line);
-      if (!d) {
-        updated.push(line);
-        continue;
-      }
+      if (!d) continue;
 
-      // Gather fresh vehicle name & location directly from GTA SA RAM memory
-      const memName = getVehicleName(d.modelId);
-      const memLoc  = getMapLocation(d.x, d.y, d.z);
-
-      const freshName = (memName && memName !== ("" + d.modelId) && memName.indexOf("Model ") !== 0) ? memName : (d.name || "");
-      if (freshName.indexOf("Model ") === 0) freshName = "";
-      const freshLoc  = memLoc || d.location || "";
-
-      const pj = (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) ? d.paintjob : -1;
-
-      const clrStr = (d.extraColor1 >= 0 && d.extraColor2 >= 0)
-                   ? (d.primaryColor + "," + d.secondaryColor + "," + d.extraColor1 + "," + d.extraColor2)
-                   : (d.primaryColor + "," + d.secondaryColor);
-
-      const newLine = "M:"  + d.modelId +
-                      (freshName ? ("|N:" + shortenLoc(freshName)) : "") +
-                      "|C:" + d.x.toFixed(2) + "," + d.y.toFixed(2) + "," + d.z.toFixed(2) +
-                      "|H:" + d.heading.toFixed(2) +
-                      "|Cl:" + clrStr +
-                      (pj >= 0 ? ("|P:" + pj) : "") +
-                      "|Hp:" + d.health +
-                      "|Tr:" + (d.tires && d.tires.length ? d.tires.join(";") : "None") +
-                      "|Dm:" + (d.panels && d.panels.length ? d.panels.join(";") : "None") +
-                      "|Dd:" + (d.doors && d.doors.length ? d.doors.join(";") : "None") +
-                      "|U:"  + (d.upgrades && d.upgrades.length ? d.upgrades.join(";") : "None") +
-                      (freshLoc ? ("|L:" + shortenLoc(freshLoc)) : "");
-
+      const newLine = formatMinifiedEntry(d);
       if (newLine !== line) modified = true;
       updated.push(newLine);
     }
@@ -1244,10 +1307,10 @@ function gatherAndUpdateAllOnStart() {
     if (modified) {
       writeDisk(updated);
       cache = updated;
-      log("LOGGER: Gathered & updated vehicle/location names on game start from game memory (" + updated.length + " entries)");
+      log("LOGGER: Migrated vehicle entries to ultra-minified format (" + updated.length + " entries)");
     } else {
       cache = lines;
-      log("LOGGER: All " + lines.length + " parked vehicle entries are up to date with game memory");
+      log("LOGGER: All " + lines.length + " parked vehicle entries are up to date");
     }
   } catch(e) {
     cache = readDisk();
