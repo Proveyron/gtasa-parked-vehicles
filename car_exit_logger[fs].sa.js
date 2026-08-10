@@ -639,6 +639,7 @@ function runMenu(player, char) {
 
   clearMenuBox();
   drainKeys();
+  f6WasDown = false;
 }
 
 function clearMenuBox() {
@@ -1274,7 +1275,7 @@ while (true) {
     } else {
       runMenu(player, char);           // blocks until closed
       drainKeys();                     // prevent key bleed after return
-      f6WasDown = Pad.IsKeyPressed(VK_F6);  // sync state
+      f6WasDown = false;               // ensure next F6 press opens on first click
     }
     continue;
   }
