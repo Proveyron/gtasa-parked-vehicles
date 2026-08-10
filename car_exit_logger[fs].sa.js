@@ -999,7 +999,7 @@ function saveCarExit(car) {
     const hp = getCarHealth(car);
     if (hp <= 250 || isCarDestroyed(car)) {
       log("LOGGER: Skipped saving exit — vehicle health <= 250 (" + hp + " HP)");
-      if (CFG.tooltips) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
+      if (CFG.tooltips) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
       return;
     }
     const mid = getCarModelId(car);
@@ -1424,7 +1424,7 @@ while (true) {
       if (isCarDestroyed(lastCarHandle) && !fireNotified) {
         fireNotified = true;
         log("LOGGER: Vehicle caught fire / health <= 250 while driving");
-        if (CFG.tooltips) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
+        if (CFG.tooltips) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
       }
     }
   } else if (wasInCar) {
@@ -1438,7 +1438,7 @@ while (true) {
           pending.push({ car: lastCarHandle, t: Date.now() });
         } else {
           log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
-          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle heavily damaged!~n~~w~Exit position not saved.");
+          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
         }
       } catch(e) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
