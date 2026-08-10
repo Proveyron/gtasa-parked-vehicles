@@ -555,6 +555,15 @@ function loadModelSync(id) {
 function spawnCarAt(modelId, x, y, z) {
   if (!loadModelSync(modelId)) return null;
   const car = Car.Create(modelId, x, y, z);
+  if (car) {
+    try {
+      if (typeof car.setCoordinatesNoOffset === 'function') {
+        car.setCoordinatesNoOffset(x, y, z);
+      } else if (typeof Car !== 'undefined' && typeof Car.SetCoordinatesNoOffset === 'function') {
+        Car.SetCoordinatesNoOffset(car, x, y, z);
+      }
+    } catch(e) {}
+  }
   Streaming.MarkModelAsNoLongerNeeded(modelId);
   return car || null;
 }
