@@ -456,36 +456,7 @@ function setCarPoppedTires(c, tiresArray) {
   }
 }
 
-// Returns [varA, varB] extras from live CVehicle memory (offsets 0x248, 0x249)
-// varA/varB: -1 = no extra, 0..5 = extra index
-function getCarExtras(c) {
-  try {
-    const mid = getCarModelId(c);
-    if (!isAutomobileModel(mid)) return [-1, -1];
-    if (typeof Memory === 'undefined') return [-1, -1];
-    const ptr = Memory.GetVehiclePointer(c);
-    if (!ptr || ptr === 0) return [-1, -1];
-    const a = Memory.Read(ptr + 0x248, 1, false);
-    const b = Memory.Read(ptr + 0x249, 1, false);
-    // 0xFF means no extra in engine; treat as -1
-    const va = (a === 0xFF || a === undefined) ? -1 : (a & 0xFF);
-    const vb = (b === 0xFF || b === undefined) ? -1 : (b & 0xFF);
-    return [va, vb];
-  } catch(e) {
-    return [-1, -1];
-  }
-}
 
-// Applies extras before the next Car.Create by calling SetModelComponents (0506)
-function applyExtrasBeforeSpawn(modelId, varA, varB) {
-  if (varA < 0 && varB < 0) return;
-  if (!isAutomobileModel(modelId)) return;
-  try {
-    if (typeof Car !== 'undefined' && typeof Car.SetModelComponents === 'function') {
-      Car.SetModelComponents(0, varA < 0 ? -1 : varA, varB < 0 ? -1 : varB);
-    }
-  } catch(e) {}
-}
 
 function deleteCarHandle(c) {
   if (!c) return;
@@ -822,7 +793,6 @@ function runStreamer(char) {
           }
 
           clearNearbyNonTracked(d.x, d.y, d.z, 0.5, playerCar);
-          applyExtrasBeforeSpawn(d.modelId, d.varA !== undefined ? d.varA : -1, d.varB !== undefined ? d.varB : -1);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             try { nc.setHeading(d.heading); } catch(e) {}
@@ -902,7 +872,6 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
       const tires  = getCarPoppedTires(h);
       const pj     = getCarPaintjob(h);
       const dam    = getCarDamage(h);
-      const extras = getCarExtras(h);
 
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
@@ -911,7 +880,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
         tires: (CFG.saveTires ? tires : []),
         panels: dam.panels, doors: dam.doors,
-        varA: extras[0], varB: extras[1],
+        varA: -1, varB: -1,
         upgrades: mods
       });
 
@@ -1096,7 +1065,6 @@ function saveCarExit(car) {
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
-    const extras = getCarExtras(car);
 
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
@@ -1105,7 +1073,7 @@ function saveCarExit(car) {
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
       tires: (CFG.saveTires ? tires : []),
       panels: dam.panels, doors: dam.doors,
-      varA: extras[0], varB: extras[1],
+      varA: -1, varB: -1,
       upgrades: mods
     });
 
