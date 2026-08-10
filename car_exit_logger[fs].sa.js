@@ -328,6 +328,36 @@ function setCarPitchAndHeading(c, pitch, heading) {
   }
 }
 
+function getCarMovablePart(c) {
+  if (!c) return -1;
+  const obj = toCar(c);
+  if (!obj) return -1;
+  try {
+    if (typeof obj.getMovablePart === 'function') {
+      const v = +obj.getMovablePart();
+      if (!isNaN(v) && v >= 0) return v;
+    }
+    if (typeof Car !== 'undefined' && typeof Car.GetMovablePart === 'function') {
+      const v = +Car.GetMovablePart(obj);
+      if (!isNaN(v) && v >= 0) return v;
+    }
+  } catch(e) {}
+  return -1;
+}
+
+function setCarMovablePart(c, val) {
+  if (!c || val === undefined || val === null || val < 0) return;
+  const obj = toCar(c);
+  if (!obj) return;
+  try {
+    if (typeof obj.controlMovablePart === 'function') {
+      obj.controlMovablePart(+val);
+    } else if (typeof Car !== 'undefined' && typeof Car.ControlMovablePart === 'function') {
+      Car.ControlMovablePart(obj, +val);
+    }
+  } catch(e) {}
+}
+
 
 
 function getCarColors(c) {
@@ -877,6 +907,9 @@ function runStreamer(char) {
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             setCarPitchAndHeading(nc, d.pitch || 0, d.heading || 0);
+            if (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) {
+              setCarMovablePart(nc, d.movablePart);
+            }
             try { nc.changeColor(d.primaryColor, d.secondaryColor); } catch(e) {}
             if (d.paintjob !== undefined && d.paintjob !== null && d.paintjob >= 0) {
               setCarPaintjob(nc, d.paintjob);
@@ -953,6 +986,8 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
     const curPitch = getCarPitch(h);
     const mPitchDiff = Math.abs(curPitch - (d.pitch || 0));
 
+    const curMov = getCarMovablePart(h);
+
     if (mDistSq >= 0.25 || mHdgDiff >= 5.0 || mPitchDiff >= 5.0) {
       const hp     = getCarHealth(h);
       if (hp <= 250) return false;
@@ -967,6 +1002,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
         pitch: curPitch,
+        movablePart: (curMov >= 0 ? curMov : d.movablePart),
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
         extraColor1: extraC.c3, extraColor2: extraC.c4,
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1122,6 +1158,7 @@ function formatMinifiedEntry(d) {
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
   const pitStr = (d.pitch !== undefined && d.pitch !== null && Math.abs(d.pitch) >= 0.5) ? d.pitch.toFixed(1) : "";
+  const movStr = (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) ? d.movablePart.toFixed(2) : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
 
   return d.modelId + "|" +
@@ -1134,6 +1171,7 @@ function formatMinifiedEntry(d) {
          dmStr + "|" +
          ddStr + "|" +
          pitStr + "|" +
+         movStr + "|" +
          uStr;
 }
 
@@ -1156,6 +1194,7 @@ function saveCarExit(car) {
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
     const pit    = getCarPitch(car);
+    const mov    = getCarMovablePart(car);
     const clrs   = getCarColors(car);
     const extraC = getCarExtraColors(car);
     const mods   = getCarMods(car, mid);
@@ -1167,6 +1206,7 @@ function saveCarExit(car) {
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
       pitch: pit,
+      movablePart: mov,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
       extraColor1: extraC.c3, extraColor2: extraC.c4,
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
@@ -1245,18 +1285,29 @@ function parseEntry(line) {
         }
 
         let pitch = 0;
-        let upgradesPart = parts[9];
+        let movablePart = -1;
+        let upgradesPart = "";
 
         if (parts[9]) {
           const p9vals = parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
           if (p9vals.length === 1 && (p9vals[0] < 1000 || p9vals[0] > 1193)) {
             pitch = p9vals[0];
-            upgradesPart = parts[10] || "";
           } else if (p9vals.every(v => v >= 1000 && v <= 1193)) {
             upgradesPart = parts[9];
           }
-        } else if (parts[10]) {
-          upgradesPart = parts[10];
+        }
+
+        if (parts[10]) {
+          const p10vals = parts[10].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
+          if (p10vals.length === 1 && p10vals[0] >= 0 && p10vals[0] <= 1.0) {
+            movablePart = p10vals[0];
+          } else if (p10vals.every(v => v >= 1000 && v <= 1193)) {
+            upgradesPart = parts[10];
+          }
+        }
+
+        if (parts[11]) {
+          upgradesPart = parts[11];
         }
 
         const upgrades = [];
@@ -1273,6 +1324,7 @@ function parseEntry(line) {
           x: x, y: y, z: z,
           heading: hdg,
           pitch: pitch,
+          movablePart: movablePart,
           primaryColor: c1,
           secondaryColor: c2,
           extraColor1: c3,
