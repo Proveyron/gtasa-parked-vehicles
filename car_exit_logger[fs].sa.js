@@ -714,57 +714,67 @@ function getTeleportOffset(mid) {
   return { dist: 2.3, zOffset: 0.3 };
 }
 
+function setCharCoordinates(char, x, y, z) {
+  if (!char) return;
+  try { if (typeof char.setCoordinates === 'function') { char.setCoordinates(x, y, z); return; } } catch(e) {}
+  try { if (typeof Char !== 'undefined' && typeof Char.SetCoordinates === 'function') { Char.SetCoordinates(char, x, y, z); return; } } catch(e) {}
+}
+
 function setCharHeading(char, hdg) {
   try { if (typeof char.setHeading === 'function') { char.setHeading(hdg); return; } } catch(e) {}
   try { if (typeof Char !== 'undefined' && typeof Char.SetHeading === 'function') { Char.SetHeading(char, hdg); return; } } catch(e) {}
 }
 
 function teleportTo(line, char, silent) {
-  const d = parseEntry(line);
-  if (!d) return;
-
-  const key = getUniqueKey(d);
-  if (streamed.hasOwnProperty(key)) {
-    const h = streamed[key];
-    if (!isCarValid(h) || isCarDestroyed(h)) {
-      log("LOGGER: Cannot teleport — target vehicle was destroyed!");
-      delete streamed[key];
-      const entries = readDisk();
-      if (entries) {
-        const clean = entries.filter(e => e !== line);
-        writeDisk(clean);
-        cache = clean;
-      }
-      if (CFG.tooltips) showTextBox("~r~Cannot teleport — vehicle was destroyed!~n~~w~Entry removed.");
-      return;
-    }
-  }
-
-  const cfg = getTeleportOffset(d.modelId);
-  const heading = d.heading || 0;
-  
-  // Offset onto the DRIVER DOOR (left) side of the vehicle based on cardinal heading
-  const rad = (heading + 90) * Math.PI / 180;
-  const tpX = d.x - Math.sin(rad) * cfg.dist;
-  const tpY = d.y + Math.cos(rad) * cfg.dist;
-  const tpZ = d.z + cfg.zOffset;
-
-  char.setCoordinates(tpX, tpY, tpZ);
-  setCharHeading(char, heading - 90);
-
   try {
-    if (typeof Camera !== 'undefined' && typeof Camera.SetBehindPlayer === 'function') {
-      Camera.SetBehindPlayer();
-    }
-  } catch(e) {}
+    const d = parseEntry(line);
+    if (!d) return;
 
-  const name = getVehicleName(d.modelId);
-  const coords = d.x.toFixed(0) + "," + d.y.toFixed(0);
-  log("LOGGER: teleported to " + name + " at " + coords + " (Health: " + (d.health || 1000) + " HP)");
-  if (!silent && CFG.tooltips) {
-    showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + coords + "~g~)!");
+    const key = getUniqueKey(d);
+    if (streamed.hasOwnProperty(key)) {
+      const h = streamed[key];
+      if (!isCarValid(h) || isCarDestroyed(h)) {
+        log("LOGGER: Cannot teleport — target vehicle was destroyed!");
+        delete streamed[key];
+        const entries = readDisk();
+        if (entries) {
+          const clean = entries.filter(e => e !== line);
+          writeDisk(clean);
+          cache = clean;
+        }
+        if (CFG.tooltips) showTextBox("~r~Cannot teleport — vehicle was destroyed!~n~~w~Entry removed.");
+        return;
+      }
+    }
+
+    const cfg = getTeleportOffset(d.modelId);
+    const heading = d.heading || 0;
+    
+    // Offset onto the DRIVER DOOR (left) side of the vehicle based on cardinal heading
+    const rad = (heading + 90) * Math.PI / 180;
+    const tpX = d.x - Math.sin(rad) * cfg.dist;
+    const tpY = d.y + Math.cos(rad) * cfg.dist;
+    const tpZ = d.z + cfg.zOffset;
+
+    setCharCoordinates(char, tpX, tpY, tpZ);
+    setCharHeading(char, heading - 90);
+
+    try {
+      if (typeof Camera !== 'undefined' && typeof Camera.SetBehindPlayer === 'function') {
+        Camera.SetBehindPlayer();
+      }
+    } catch(e) {}
+
+    const name = getVehicleName(d.modelId);
+    const coords = d.x.toFixed(0) + "," + d.y.toFixed(0);
+    log("LOGGER: teleported to " + name + " at " + coords + " (Health: " + (d.health || 1000) + " HP)");
+    if (!silent && CFG.tooltips) {
+      showTextBox("~g~Teleported to ~y~" + name + "~g~ (~y~" + coords + "~g~)!");
+    }
+    runStreamer(char);
+  } catch(e) {
+    log("LOGGER: teleportTo error: " + (e.stack || e));
   }
-  runStreamer(char);
 }
 
 function getUniqueKey(d) {
@@ -1459,11 +1469,9 @@ while (true) {
   }
 
   // ── F7: reload INI + re-stream ────────────────────────────────
-  const f7Now         = Pad.IsKeyPressed(VK_F7);
-  const f7JustPressed = f7Now && !f7WasDown;
-  f7WasDown           = f7Now;
-
-  if (f7JustPressed) {
+  const f7Now = Pad.IsKeyPressed(VK_F7);
+  if (f7Now && !f7WasDown) {
+    f7WasDown = true;
     loadConfig();
     let playerCar = null;
     try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
@@ -1476,6 +1484,8 @@ while (true) {
     runStreamer(char);
     log("LOGGER: reloaded, " + cache.length + " entries");
     showTextBox("~y~INI reloaded! ~g~" + cache.length + " ~y~entries");
+  } else if (!f7Now) {
+    f7WasDown = false;
   }
 
   // ── F6: open menu (blocking sub-loop, main loop suspends) ─────
