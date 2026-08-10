@@ -53,29 +53,60 @@ let f6WasDown  = false;
 let f7WasDown  = false;
 
 // ════════════════════════════════════════════════════════════════
-//  NON-TUNABLE VEHICLE MODELS (Bikes, Boats, Helis, Planes, RC, Trailers)
-//  Querying GET_CURRENT_CAR_MOD (043C) on these freezes/hangs GTA SA!
+//  DYNAMIC TUNABILITY PROBE
+//  Detects mod-shop compatibility at runtime using GTA SA model
+//  type opcodes (0A01/081E/0820/081F). Results cached per model ID.
+//  A slot-0 probe at vehicle ENTRY TIME confirms actual tunability.
+//  No static lists — works with modded vehicles automatically.
 // ════════════════════════════════════════════════════════════════
-const NON_TUNABLE_MODELS = [
-  // Motorcycles & Bicycles
-  448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 581, 586,
-  // Boats
-  430, 446, 452, 453, 454, 472, 473, 484, 493, 595,
-  // Helicopters & Planes
-  417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593,
-  // Trailers, RC & Trains
-  435, 441, 450, 464, 465, 501, 537, 538, 564, 569, 570, 584, 590, 591, 594, 606, 607, 608, 610, 611,
-  // Semi-Trucks (no tuning shop support — GET_CURRENT_CAR_MOD hangs on these)
-  403, 414, 443, 455, 514, 515, 524, 532, 578,
-  // Emergency & Government Vehicles (police, fire, ambulance, military)
-  407, 408, 416, 427, 428, 432, 433, 490, 528, 596, 597, 598, 599, 601,
-  // Industrial, Construction & Special
-  406, 410, 411, 423, 431, 437, 440, 449, 455, 456, 457, 470, 475, 486, 524, 532, 544, 556, 557, 574, 582, 583
-];
+const tunableCache = {};   // modelId -> true | false
+
+function probeAndCacheTunability(car, mid) {
+  // Already cached
+  if (tunableCache.hasOwnProperty(mid)) return;
+
+  try {
+    // Step 1: Model type check — only automobiles can have tuning mods
+    let isCar = false;
+    if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
+      isCar = !!Car.IsThisModelACar(mid);
+    }
+    if (!isCar) { tunableCache[mid] = false; return; }
+
+    // Step 2: Emergency vehicles can't visit mod shops
+    try {
+      if (typeof car.isEmergencyServices === 'function' && car.isEmergencyServices()) {
+        tunableCache[mid] = false;
+        return;
+      }
+    } catch(e) {}
+
+    // Step 3: Live slot-0 probe — safe here because we're in a wait(0) main-loop frame
+    //         (not inside saveCarExit which is called from runPending with no wait)
+    let slot0 = undefined;
+    try {
+      if (typeof car.getCurrentMod === 'function') slot0 = car.getCurrentMod(0);
+    } catch(e) { tunableCache[mid] = false; return; }
+
+    // slot0 returns 0 for no mod, or a mod ID. Anything except an exception = tunable.
+    tunableCache[mid] = (slot0 !== undefined && slot0 !== null);
+  } catch(e) {
+    tunableCache[mid] = false;
+  }
+}
 
 function isTunableVehicle(mid) {
-  if (!mid || mid < 400 || mid > 611) return false;
-  return NON_TUNABLE_MODELS.indexOf(mid) === -1;
+  if (!mid) return false;
+  // If cached use that, otherwise conservatively return false
+  // (probeAndCacheTunability must be called at entry time first)
+  if (tunableCache.hasOwnProperty(mid)) return tunableCache[mid];
+  // Fallback for vehicles entered before probe: use model type only
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
+      return !!Car.IsThisModelACar(mid);
+    }
+  } catch(e) {}
+  return false;
 }
 
 
@@ -1397,6 +1428,7 @@ while (true) {
         if (car && isCarValid(car) && mid > 0) {
           lastCarHandle = car;
           log("LOGGER: Entered vehicle model " + mid);
+          probeAndCacheTunability(car, mid);  // safe probe in wait(0) frame
           tryClaimCar(car, char);
         }
       } catch(e) {
