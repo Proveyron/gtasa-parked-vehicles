@@ -507,6 +507,34 @@ function setCarPoppedTires(c, tiresArray) {
   }
 }
 
+// Returns [varA, varB] extras from live CVehicle memory (offsets 0x248, 0x249)
+// varA/varB: -1 = no extra, 0..5 = extra index
+function getCarExtras(c) {
+  try {
+    if (typeof Memory === 'undefined') return [-1, -1];
+    const ptr = Memory.GetVehiclePointer(c);
+    if (!ptr || ptr === 0) return [-1, -1];
+    const a = Memory.Read(ptr + 0x248, 1, false);
+    const b = Memory.Read(ptr + 0x249, 1, false);
+    // 0xFF means no extra in engine; treat as -1
+    const va = (a === 0xFF || a === undefined) ? -1 : (a & 0xFF);
+    const vb = (b === 0xFF || b === undefined) ? -1 : (b & 0xFF);
+    return [va, vb];
+  } catch(e) {
+    return [-1, -1];
+  }
+}
+
+// Applies extras before the next Car.Create by calling SetModelComponents (0506)
+function applyExtrasBeforeSpawn(modelId, varA, varB) {
+  if (varA < 0 && varB < 0) return;
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.SetModelComponents === 'function') {
+      Car.SetModelComponents(0, varA < 0 ? -1 : varA, varB < 0 ? -1 : varB);
+    }
+  } catch(e) {}
+}
+
 function deleteCarHandle(c) {
   if (!c) return;
   try {
@@ -837,6 +865,7 @@ function runStreamer(char) {
           }
 
           clearNearbyNonTracked(d.x, d.y, d.z, 3.0, playerCar);
+          applyExtrasBeforeSpawn(d.modelId, d.varA !== undefined ? d.varA : -1, d.varB !== undefined ? d.varB : -1);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             try { nc.setHeading(d.heading); } catch(e) {}
@@ -1016,6 +1045,7 @@ function formatMinifiedEntry(d) {
   const trStr = (d.tires && d.tires.length) ? d.tires.join(",") : "";
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
+  const exStr = (d.varA !== undefined && d.varA >= 0) ? d.varA + (d.varB !== undefined && d.varB >= 0 ? "," + d.varB : "") : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
 
   return d.modelId + "|" +
@@ -1027,6 +1057,7 @@ function formatMinifiedEntry(d) {
          trStr + "|" +
          dmStr + "|" +
          ddStr + "|" +
+         exStr + "|" +
          uStr;
 }
 
@@ -1056,6 +1087,7 @@ function saveCarExit(car) {
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
+    const extras = getCarExtras(car);
 
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
@@ -1063,7 +1095,9 @@ function saveCarExit(car) {
       extraColor1: extraC.c3, extraColor2: extraC.c4,
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
       tires: (CFG.saveTires ? tires : []),
-      panels: dam.panels, doors: dam.doors, upgrades: mods
+      panels: dam.panels, doors: dam.doors,
+      varA: extras[0], varB: extras[1],
+      upgrades: mods
     });
 
     const ents = readDisk();
@@ -1145,6 +1179,31 @@ function parseEntry(line) {
           }
         }
 
+        // extras slot: parts[10] (was previously upgrades before extras were added)
+        // Support both old format (10=upgrades) and new format (10=extras, 11=upgrades)
+        let varA = -1, varB = -1;
+        let upgradesPart = parts[9];  // legacy: upgrades at index 9
+        if (parts[10] !== undefined) {
+          // new format: index 9=extras, 10=upgrades
+          // detect by checking if parts[9] values are all in mod range (1000+)
+          const p9vals = parts[9] ? parts[9].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
+          const p10vals = parts[10] ? parts[10].split(",").map(v => parseInt(v,10)).filter(v => !isNaN(v)) : [];
+          const p9IsExtras = p9vals.length === 0 || p9vals.every(v => v >= 0 && v <= 10);
+          const p10IsUpgrades = p10vals.length === 0 || p10vals.every(v => v >= 1000 && v <= 1193);
+          if (p9IsExtras || p10IsUpgrades) {
+            // new format
+            if (parts[9] && p9vals.length > 0) { varA = p9vals[0]; varB = p9vals[1] !== undefined ? p9vals[1] : -1; }
+            upgradesPart = parts[10];
+          }
+        }
+        const finalUpgrades = [];
+        if (upgradesPart) {
+          for (const p of upgradesPart.split(",")) {
+            const n = parseInt(p, 10);
+            if (n >= 1000 && n <= 1193) finalUpgrades.push(n);
+          }
+        }
+
         return {
           modelId: mid,
           name: getVehicleName(mid),
@@ -1160,7 +1219,9 @@ function parseEntry(line) {
           tires: tires,
           panels: panels,
           doors: doors,
-          upgrades: upgrades,
+          varA: varA,
+          varB: varB,
+          upgrades: finalUpgrades,
         };
       }
     }
@@ -1230,6 +1291,8 @@ function parseEntry(line) {
       tires:          tires,
       panels:         panels,
       doors:          doors,
+      varA:           -1,  // legacy format: no extras stored
+      varB:           -1,
       upgrades:       upgrades,
     };
   } catch(e) { return null; }
