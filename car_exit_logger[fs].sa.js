@@ -288,35 +288,41 @@ function getCarHdg(c) {
 
 
 
+function isMovablePartModel(mid) {
+  return mid === 443 || mid === 530 || mid === 406 || mid === 486 || mid === 525 || mid === 531 || mid === 592;
+}
+
 function getCarMovablePart(c) {
   if (!c) return -1;
   const obj = toCar(c);
   if (!obj) return -1;
   const mid = getCarModelId(obj);
+  if (!isMovablePartModel(mid)) return -1;
+
   try {
     if (typeof obj.getMovablePart === 'function') {
       const v = +obj.getMovablePart();
-      if (!isNaN(v) && v >= 0.0 && v <= 360.0) return v;
+      if (!isNaN(v) && v >= 0.0) return v;
     }
   } catch(e) {}
+
   try {
     let ptr = 0;
     if (typeof obj.getPointer === 'function') ptr = obj.getPointer();
     else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
 
     if (ptr && typeof Memory !== 'undefined' && typeof Memory.ReadFloat === 'function') {
-      for (let offset = 0x870; offset <= 0x950; offset += 4) {
-        const val = Memory.ReadFloat(ptr + offset);
-        if (!isNaN(val) && val > 0.0001 && val <= 360.0) {
-          log("LOGGER: getCarMovablePart (model=" + mid + ") found float at ptr+0x" + offset.toString(16) + " = " + val);
-          return val;
-        }
-      }
+      const v1 = Memory.ReadFloat(ptr + 0x8C0);
+      if (!isNaN(v1) && v1 >= 0.0) return v1;
+      const v2 = Memory.ReadFloat(ptr + 0x8C4);
+      if (!isNaN(v2) && v2 >= 0.0) return v2;
+      const v3 = Memory.ReadFloat(ptr + 0x8A4);
+      if (!isNaN(v3) && v3 >= 0.0) return v3;
     }
   } catch(e) {
     log("LOGGER: getCarMovablePart error: " + (e.stack || e));
   }
-  return -1;
+  return 0.0;
 }
 
 function setCarMovablePart(c, val) {
@@ -1295,7 +1301,7 @@ function parseEntry(line) {
 
         if (parts[9]) {
           const p9vals = parts[9].split(",").map(v => parseFloat(v)).filter(v => !isNaN(v));
-          if (p9vals.length === 1 && p9vals[0] >= 0 && p9vals[0] <= 1.0) {
+          if (p9vals.length === 1 && p9vals[0] >= 0.0 && p9vals[0] <= 360.0) {
             movablePart = p9vals[0];
             upgradesPart = parts[10] || "";
           } else if (p9vals.every(v => v >= 1000 && v <= 1193)) {
