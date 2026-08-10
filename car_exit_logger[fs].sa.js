@@ -1024,7 +1024,6 @@ function parseEntry(line) {
           name: getVehicleName(mid),
           x: x, y: y, z: z,
           heading: hdg,
-          movablePart: movablePart,
           primaryColor: c1,
           secondaryColor: c2,
           extraColor1: c3,
