@@ -621,8 +621,8 @@ function checkCheatCodes(player, char) {
         if (!pp) return;
         const hdg = getCarHdg(char);
         const rad = hdg * Math.PI / 180;
-        const spX = pp.x - Math.sin(rad) * 2.0;
-        const spY = pp.y + Math.cos(rad) * 2.0;
+        const spX = pp.x - Math.sin(rad) * 6.0;
+        const spY = pp.y + Math.cos(rad) * 6.0;
         const spZ = pp.z;
 
         const nc = spawnCarAt(443, spX, spY, spZ);
