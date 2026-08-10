@@ -99,15 +99,36 @@ const BOATS = [430, 446, 452, 453, 454, 472, 473, 484, 493, 595];
 const BIKES = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 571, 581, 586];
 const AIRCRAFT = [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593];
 
+function isBoatModel(mid) {
+  return BOATS.indexOf(mid) !== -1;
+}
+
+function isBikeModel(mid) {
+  return BIKES.indexOf(mid) !== -1;
+}
+
+function isAircraftModel(mid) {
+  return AIRCRAFT.indexOf(mid) !== -1;
+}
+
 function isAutomobileModel(mid) {
   if (!mid || mid <= 0) return false;
-  if (BOATS.indexOf(mid) !== -1 || BIKES.indexOf(mid) !== -1 || AIRCRAFT.indexOf(mid) !== -1) return false;
+  if (isBoatModel(mid) || isBikeModel(mid) || isAircraftModel(mid)) return false;
   try {
     if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
       return !!Car.IsThisModelACar(mid);
     }
   } catch(e) {}
   return true;
+}
+
+function isCarInWater(c) {
+  if (!c) return false;
+  try {
+    if (typeof c.isInWater === 'function') return c.isInWater();
+    if (typeof Car !== 'undefined' && typeof Car.IsInWater === 'function') return Car.IsInWater(c);
+  } catch(e) {}
+  return false;
 }
 
 function isTunableVehicle(mid) {
@@ -230,7 +251,18 @@ function isCarDestroyed(c) {
   if (!c) return true;
   const obj = toCar(c);
   if (!obj || !isCarValid(obj)) return true;
-  return getCarHealth(obj) <= 250;
+  try {
+    let dead = false;
+    if (typeof obj.isDead === 'function') dead = obj.isDead();
+    else if (typeof Car !== 'undefined' && typeof Car.IsDead === 'function') dead = Car.IsDead(obj);
+    if (dead) return true;
+  } catch(e) {}
+  if (getCarHealth(obj) <= 250) return true;
+  try {
+    const mid = getCarModelId(obj);
+    if (!isBoatModel(mid) && isCarInWater(obj)) return true;
+  } catch(e) {}
+  return false;
 }
 
 function isCarUsable(c) {
@@ -434,6 +466,10 @@ function applyStoredDamage(c, panels, doors) {
 
 function getCarPoppedTires(c) {
   if (!c) return [];
+  const mid = getCarModelId(c);
+  if (mid === 509 || mid === 481 || mid === 510) return [];
+  if (!isAutomobileModel(mid) && !isBikeModel(mid)) return [];
+
   const popped = [];
   for (let i = 0; i < 4; i++) {
     try {
@@ -448,6 +484,9 @@ function getCarPoppedTires(c) {
 
 function setCarPoppedTires(c, tiresArray) {
   if (!c || !tiresArray || !tiresArray.length) return;
+  const mid = getCarModelId(c);
+  if (mid === 509 || mid === 481 || mid === 510) return;
+  if (!isAutomobileModel(mid) && !isBikeModel(mid)) return;
   for (const t of tiresArray) {
     try {
       if (typeof c.burstTire === 'function') c.burstTire(t);
@@ -659,19 +698,9 @@ function clearMenuBox() {
 }
 
 function getTeleportOffset(mid) {
-  // Boats: 0.0m offset (spawn on boat deck)
-  const BOATS = [430, 446, 452, 453, 454, 472, 473, 484, 493, 595];
-  if (BOATS.indexOf(mid) !== -1) return { dist: 0.0, zOffset: 1.5 };
-
-  // Bikes & Bicycles: 1.5m offset
-  const BIKES = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 571, 581, 586];
-  if (BIKES.indexOf(mid) !== -1) return { dist: 1.5, zOffset: 0.3 };
-
-  // Planes & Helicopters: 5.0m offset
-  const AIRCRAFT = [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593];
-  if (AIRCRAFT.indexOf(mid) !== -1) return { dist: 5.0, zOffset: 0.3 };
-
-  // Cars, Trucks, Vans, Buses (default): 2.3m offset
+  if (isBoatModel(mid)) return { dist: 0.0, zOffset: 1.5 };
+  if (isBikeModel(mid)) return { dist: 1.5, zOffset: 0.3 };
+  if (isAircraftModel(mid)) return { dist: 5.0, zOffset: 0.3 };
   return { dist: 2.3, zOffset: 0.3 };
 }
 
@@ -804,7 +833,7 @@ function runStreamer(char) {
             if (d.extraColor1 >= 0 && d.extraColor2 >= 0) {
               setCarExtraColors(nc, d.extraColor1, d.extraColor2);
             }
-            if (CFG.unlockDoors) try { nc.lockDoors(1); } catch(e) {}
+            if (CFG.unlockDoors && isAutomobileModel(d.modelId)) try { nc.lockDoors(1); } catch(e) {}
             if (CFG.saveHealth && d.health && d.health > 250 && d.health <= 1000) {
               setCarHealth(nc, d.health);
             }
