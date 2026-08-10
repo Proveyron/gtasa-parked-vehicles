@@ -206,6 +206,7 @@ let lastPendingMs  = 0;
 let lastStreamerMs = 0;
 let lastFireCheckMs = 0;
 let streamed       = {};   // entry string → car handle
+let spawnTimeMap   = {};   // key → spawn timestamp ms
 let cache          = [];
 
 // ════════════════════════════════════════════════════════════════
@@ -894,6 +895,7 @@ function runStreamer(char) {
               }
             }
             streamed[key] = nc;
+            spawnTimeMap[key] = Date.now();
             log("LOGGER: Streamed IN vehicle " + (d.name || getVehicleName(d.modelId)) + " at " + d.x.toFixed(1) + "," + d.y.toFixed(1));
           }
         }
@@ -915,6 +917,7 @@ function runStreamer(char) {
             log("LOGGER: Streamed OUT vehicle " + (d.name || getVehicleName(d.modelId)));
           }
           delete streamed[key];
+          delete spawnTimeMap[key];
         }
       }
     }
@@ -926,6 +929,11 @@ function runStreamer(char) {
 function updateParkedCarStateIfNeeded(h, d, i, entries) {
   try {
     if (!isCarValid(h) || isCarDestroyed(h)) return false;
+    const oldKey = getUniqueKey(d);
+    const spawnT = spawnTimeMap[oldKey] || 0;
+    // 4-second grace period after spawn for physics & collision settlement (e.g. Packer ramps, trailers)
+    if (Date.now() - spawnT < 4000) return false;
+
     const cp = getCarPos(h);
     const hdg = getCarHdg(h);
     const mDx = cp.x - d.x, mDy = cp.y - d.y, mDz = cp.z - d.z;
@@ -962,11 +970,17 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
       cache = entries;
       writeDisk(cache);
 
-      if (oldKey && streamed.hasOwnProperty(oldKey)) delete streamed[oldKey];
+      if (oldKey && streamed.hasOwnProperty(oldKey)) {
+        delete streamed[oldKey];
+        delete spawnTimeMap[oldKey];
+      }
 
       const newD = parseEntry(newLine);
       const newKey = getUniqueKey(newD);
-      if (newKey) streamed[newKey] = h;
+      if (newKey) {
+        streamed[newKey] = h;
+        spawnTimeMap[newKey] = Date.now();
+      }
 
       log("LOGGER: Updated position for moved parked " + getVehicleName(d.modelId) + " to " + cp.x.toFixed(1) + "," + cp.y.toFixed(1));
       return true;
@@ -1488,6 +1502,7 @@ while (true) {
       try { if (isCarValid(c) && (!playerCar || c !== playerCar)) deleteCarHandle(c); } catch(e) {}
     }
     streamed = {};
+    spawnTimeMap = {};
     gatherAndUpdateAllOnStart();
     runStreamer(char);
     log("LOGGER: reloaded, " + cache.length + " entries");
