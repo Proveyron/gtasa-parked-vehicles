@@ -1037,9 +1037,8 @@ function saveCarExit(car) {
     const key = getUniqueKey(d);
     if (key) streamed[key] = car;
 
-    const trText = (CFG.saveTires && tires.length) ? (" ~r~[" + tires.length + " flat tire" + (tires.length > 1 ? "s" : "") + "]") : "";
     log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " | Health: " + hp + " HP (" + line + ")");
-    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + trText);
+    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
   }
