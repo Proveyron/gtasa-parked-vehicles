@@ -554,13 +554,14 @@ function loadModelSync(id) {
 
 function spawnCarAt(modelId, x, y, z) {
   if (!loadModelSync(modelId)) return null;
-  const car = Car.Create(modelId, x, y, z);
+  const spawnZ = z + 0.5;
+  const car = Car.Create(modelId, x, y, spawnZ);
   if (car) {
     try {
       if (typeof car.setCoordinatesNoOffset === 'function') {
-        car.setCoordinatesNoOffset(x, y, z);
+        car.setCoordinatesNoOffset(x, y, spawnZ);
       } else if (typeof Car !== 'undefined' && typeof Car.SetCoordinatesNoOffset === 'function') {
-        Car.SetCoordinatesNoOffset(car, x, y, z);
+        Car.SetCoordinatesNoOffset(car, x, y, spawnZ);
       }
     } catch(e) {}
   }
