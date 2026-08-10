@@ -307,15 +307,16 @@ function updateMovablePartControl(char) {
     if (!h) return;
 
     if (!movablePartMap.hasOwnProperty(h)) {
-      movablePartMap[h] = 0.0;
+      movablePartMap[h] = 1.0; // Default: ramp raised / forks up
     }
 
-    const upPressed   = Pad.IsKeyPressed(VK_NUM8);
-    const downPressed = Pad.IsKeyPressed(VK_NUM2);
+    const num2Pressed = Pad.IsKeyPressed(VK_NUM2);
+    const num8Pressed = Pad.IsKeyPressed(VK_NUM8);
 
-    if (upPressed) {
+    // In GTA SA: Numpad 2 / Special Up raises ramp to 1.0, Numpad 8 / Special Down lowers ramp to 0.0
+    if (num2Pressed) {
       movablePartMap[h] = Math.min(1.0, movablePartMap[h] + 0.05);
-    } else if (downPressed) {
+    } else if (num8Pressed) {
       movablePartMap[h] = Math.max(0.0, movablePartMap[h] - 0.05);
     }
   } catch(e) {}
@@ -341,7 +342,7 @@ function getCarMovablePart(c) {
     }
   } catch(e) {}
 
-  return 0.0;
+  return 1.0; // Default ramp raised (1.0)
 }
 
 function setCarMovablePart(c, val) {
