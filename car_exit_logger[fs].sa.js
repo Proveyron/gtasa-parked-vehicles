@@ -292,14 +292,28 @@ function getCarMovablePart(c) {
   if (!c) return -1;
   const obj = toCar(c);
   if (!obj) return -1;
+  const mid = getCarModelId(c);
+  if (mid !== 443 && mid !== 530 && mid !== 406 && mid !== 486 && mid !== 525 && mid !== 531 && mid !== 592) {
+    return -1;
+  }
   try {
     if (typeof obj.getMovablePart === 'function') {
       const v = +obj.getMovablePart();
-      if (!isNaN(v) && v >= 0) return v;
+      if (!isNaN(v) && v >= 0.0 && v <= 1.0) return v;
     }
-    if (typeof Car !== 'undefined' && typeof Car.GetMovablePart === 'function') {
-      const v = +Car.GetMovablePart(obj);
-      if (!isNaN(v) && v >= 0) return v;
+  } catch(e) {}
+  try {
+    let ptr = 0;
+    if (typeof obj.getPointer === 'function') ptr = obj.getPointer();
+    else if (typeof Car !== 'undefined' && typeof Car.GetPointer === 'function') ptr = Car.GetPointer(obj);
+
+    if (ptr && typeof Memory !== 'undefined' && typeof Memory.ReadFloat === 'function') {
+      const v1 = Memory.ReadFloat(ptr + 0x8C0);
+      if (!isNaN(v1) && v1 >= 0.0 && v1 <= 1.0) return v1;
+      const v2 = Memory.ReadFloat(ptr + 0x8C4);
+      if (!isNaN(v2) && v2 >= 0.0 && v2 <= 1.0) return v2;
+      const v3 = Memory.ReadFloat(ptr + 0x8A4);
+      if (!isNaN(v3) && v3 >= 0.0 && v3 <= 1.0) return v3;
     }
   } catch(e) {}
   return -1;
@@ -966,8 +980,9 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
     const mHdgDiff = Math.abs(hdg - d.heading);
 
     const curMov = getCarMovablePart(h);
+    const mMovDiff = (curMov >= 0 && d.movablePart !== undefined && d.movablePart >= 0) ? Math.abs(curMov - d.movablePart) : 0;
 
-    if (mDistSq >= 0.25 || mHdgDiff >= 5.0) {
+    if (mDistSq >= 0.25 || mHdgDiff >= 5.0 || mMovDiff >= 0.05) {
       const hp     = getCarHealth(h);
       if (hp <= 250) return false;
 
