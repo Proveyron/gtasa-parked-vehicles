@@ -898,6 +898,11 @@ function runStreamer(char) {
             continue;
           }
 
+          // Enforce movable part state continuously on stationary vehicle
+          if (d.movablePart !== undefined && d.movablePart !== null && d.movablePart >= 0) {
+            setCarMovablePart(h, d.movablePart);
+          }
+
           // If stationary/stopped after being hit or moved, update stored position & damage
           const rawSpd = getCarSpd(h);
           const speed  = (isNaN(rawSpd) || rawSpd < 0) ? 0 : rawSpd;
@@ -1196,6 +1201,7 @@ function saveCarExit(car) {
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
     const mov    = getCarMovablePart(car);
+    log("LOGGER: getCarMovablePart for model " + mid + " returned " + mov);
     const clrs   = getCarColors(car);
     const extraC = getCarExtraColors(car);
     const mods   = getCarMods(car, mid);
