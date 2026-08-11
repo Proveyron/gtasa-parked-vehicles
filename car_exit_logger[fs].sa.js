@@ -76,19 +76,17 @@ function isAircraftModel(mid) {
   return false;
 }
 
-function isAutomobileModel(mid) {
-  if (!mid) return false;
-  try {
-    if (typeof Car !== 'undefined' && typeof Car.IsThisModelACar === 'function') {
-      return !!Car.IsThisModelACar(mid);
-    }
-  } catch(e) {}
-  return !isBoatModel(mid) && !isAircraftModel(mid);
-}
+const BIKE_MODEL_IDS = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 581, 586];
 
 function isBikeModel(mid) {
   if (!mid) return false;
-  return !isBoatModel(mid) && !isAircraftModel(mid) && !isAutomobileModel(mid);
+  return BIKE_MODEL_IDS.indexOf(mid) !== -1;
+}
+
+function isAutomobileModel(mid) {
+  if (!mid) return false;
+  if (isBoatModel(mid) || isAircraftModel(mid) || isBikeModel(mid)) return false;
+  return true;
 }
 function isTunableVehicle(mid) {
   if (!mid) return false;
