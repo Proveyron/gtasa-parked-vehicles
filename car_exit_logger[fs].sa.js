@@ -378,10 +378,6 @@ function getCarDamage(c) {
       if (isDam) panels.push(p);
     } catch(e) {}
   }
-  if (!panels.length && doors.length) {
-    if (doors.indexOf(0) !== -1) panels.push(2);
-    if (doors.indexOf(1) !== -1) panels.push(3);
-  }
   return { panels: panels, doors: doors };
 }
 function applyStoredDamage(c, panels, doors) {
