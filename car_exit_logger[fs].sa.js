@@ -508,7 +508,7 @@ function renderParkedMenu(entries, sel) {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-  txt += "~w~8/2=Move & Teleport  4/6=Page  F6=Exit";
+  txt += "~w~8/2=Move  5=Teleport  4/6=Page  F6=Exit";
   showTextBox(txt);
 }
 function purgeDestroyedEntries() {
@@ -587,12 +587,11 @@ function runMenu(player, char) {
       changed = true;
     }
     if (changed) {
-      teleportTo(entries[sel], char, true);
       renderParkedMenu(entries, sel);
     }
     if (enterN && !enterD) {
-      teleportTo(entries[sel], char, true);
-      renderParkedMenu(entries, sel);
+      teleportTo(entries[sel], char, false);
+      break;
     }
     upD    = upN;
     downD  = downN;
@@ -655,6 +654,12 @@ function teleportTo(line, char, silent) {
     const tpX = d.x - Math.sin(rad) * cfg.dist;
     const tpY = d.y + Math.cos(rad) * cfg.dist;
     const tpZ = d.z + cfg.zOffset;
+    try {
+      if (typeof Streaming !== 'undefined') {
+        if (typeof Streaming.RequestCollision === 'function') Streaming.RequestCollision(tpX, tpY);
+        if (typeof Streaming.LoadScene === 'function') Streaming.LoadScene(tpX, tpY, tpZ);
+      }
+    } catch(e) {}
     setCharCoordinates(char, tpX, tpY, tpZ);
     setCharHeading(char, heading - 90);
     try {
