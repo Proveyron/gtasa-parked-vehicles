@@ -388,8 +388,9 @@ function getCarPoppedTires(c) {
   const mid = getCarModelId(c);
   if (mid === 509 || mid === 481 || mid === 510) return [];
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return [];
+  const maxTires = isBikeModel(mid) ? 2 : 4;
   const popped = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < maxTires; i++) {
     try {
       let isBurst = false;
       if (typeof c.isTireBurst === 'function') isBurst = c.isTireBurst(i);
@@ -404,12 +405,34 @@ function setCarPoppedTires(c, tiresArray) {
   const mid = getCarModelId(c);
   if (mid === 509 || mid === 481 || mid === 510) return;
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return;
+  const maxTires = isBikeModel(mid) ? 2 : 4;
   for (const t of tiresArray) {
+    if (t >= maxTires) continue;
     try {
       if (typeof c.burstTire === 'function') c.burstTire(t);
       else if (typeof Car !== 'undefined' && typeof Car.BurstTire === 'function') Car.BurstTire(c, t);
     } catch(e) {}
   }
+}
+function isCarEmpty(c) {
+  if (!c) return true;
+  try {
+    let driver = null;
+    if (typeof c.getDriver === 'function') driver = c.getDriver();
+    else if (typeof Car !== 'undefined' && typeof Car.GetDriver === 'function') driver = Car.GetDriver(c);
+    if (driver) {
+      try {
+        if (typeof driver.doesExist === 'function' && driver.doesExist()) return false;
+      } catch(e) { return false; }
+    }
+  } catch(e) {}
+  try {
+    let passCount = 0;
+    if (typeof c.getNumberOfPassengers === 'function') passCount = c.getNumberOfPassengers();
+    else if (typeof Car !== 'undefined' && typeof Car.GetNumberOfPassengers === 'function') passCount = Car.GetNumberOfPassengers(c);
+    if (passCount > 0) return false;
+  } catch(e) {}
+  return true;
 }
 function deleteCarHandle(c) {
   if (!c) return;
@@ -432,6 +455,11 @@ function deleteCarHandle(c) {
       } catch(e) {}
     }
   } catch(e) {}
+  // HARD CRASH PREVENTION: Never delete a car that has an active driver or passenger!
+  if (!isCarEmpty(c)) {
+    log("LOGGER: BLOCKED deleteCarHandle — vehicle is not empty (driver/passenger present)");
+    return;
+  }
   try { if (typeof c.delete === 'function') { c.delete(); return; } } catch(e) {}
   try { if (typeof Car !== 'undefined' && typeof Car.Delete === 'function') { Car.Delete(c); return; } } catch(e) {}
 }
