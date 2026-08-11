@@ -921,25 +921,25 @@ function clearNearbyNonTracked(x, y, z, r, playerCar, char) {
 }
 function tryClaimCar(car, char) {
   try {
-    let sitting = false;
-    try { if (typeof char.isSittingInCar === 'function') sitting = char.isSittingInCar(car); } catch(e) {}
-    try { if (!sitting && typeof Char !== 'undefined' && typeof Char.IsSittingInCar === 'function') sitting = Char.IsSittingInCar(char, car); } catch(e) {}
-    if (!sitting) return;
-    const mid  = getCarModelId(car);
+    if (!car || !isCarValid(car)) return;
+    const mid = getCarModelId(car);
+    if (mid <= 0) return;
+    const cp = getCarPos(car);
     const ents = cache;
     if (!ents || !ents.length) return;
-    // Only claim an entry whose streamed handle is THIS exact car.
-    // Matching by model ID + proximity alone would wrongly claim a
-    // saved entry when the player steals a different car of the same model.
+
     let claimIdx = -1;
     for (let i = 0; i < ents.length; i++) {
       const d = parseEntry(ents[i]);
       if (!d || d.modelId !== mid) continue;
       const key = getUniqueKey(d);
-      if (!streamed.hasOwnProperty(key)) continue; // not streamed in — can't be this car
       const h = streamed[key];
-      // Compare handles: must be the exact same car object the player entered
-      if (h === car || (h && car && h.handle !== undefined && h.handle === car.handle)) {
+      
+      const dx = cp.x - d.x, dy = cp.y - d.y, dz = cp.z - d.z;
+      const distSq = dx*dx + dy*dy + dz*dz;
+      
+      // Match if streamed handle matches OR vehicle is within 4.0m of parked position
+      if ((h && sameCar(h, car)) || distSq <= 16.0) {
         claimIdx = i;
         break;
       }
@@ -948,8 +948,8 @@ function tryClaimCar(car, char) {
       const ln  = ents[claimIdx];
       const d   = parseEntry(ln);
       const key = d ? getUniqueKey(d) : "";
-      if (key && streamed[key]) delete streamed[key];
-      if (key) delete spawnTimeMap[key];
+      if (key && streamed.hasOwnProperty(key)) delete streamed[key];
+      if (key && spawnTimeMap.hasOwnProperty(key)) delete spawnTimeMap[key];
       ents.splice(claimIdx, 1);
       writeDisk(ents);
       cache = ents;
