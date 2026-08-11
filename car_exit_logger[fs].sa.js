@@ -436,6 +436,7 @@ function deleteCarHandle(c) {
   try { if (typeof Car !== 'undefined' && typeof Car.Delete === 'function') { Car.Delete(c); return; } } catch(e) {}
 }
 function loadModelSync(id) {
+  if (Streaming.HasModelLoaded(id)) return true;
   Streaming.RequestModel(id);
   Streaming.LoadAllModelsNow();
   return Streaming.HasModelLoaded(id);
@@ -508,7 +509,7 @@ function renderParkedMenu(entries, sel) {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-  txt += "~w~8/2=Move  5=Teleport  4/6=Page  F6=Exit";
+  txt += "~w~8/2=Move & Teleport  4/6=Page  F6=Exit";
   showTextBox(txt);
 }
 function purgeDestroyedEntries() {
@@ -587,6 +588,7 @@ function runMenu(player, char) {
       changed = true;
     }
     if (changed) {
+      teleportTo(entries[sel], char, true);
       renderParkedMenu(entries, sel);
     }
     if (enterN && !enterD) {
