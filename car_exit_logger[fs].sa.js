@@ -719,6 +719,9 @@ function runStreamer(char) {
           if (playerCar && sq < 36.0) {
             continue;
           }
+          // If this entry was just repositioned this iteration its new key is
+          // already registered in streamed — skip to avoid a duplicate spawn.
+          if (streamed.hasOwnProperty(key)) continue;
           clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar, char);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
@@ -1328,7 +1331,7 @@ while (true) {
     try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
     for (const k in streamed) {
       const c = streamed[k];
-      try { if (isCarValid(c) && (!playerCar || c !== playerCar)) deleteCarHandle(c); } catch(e) {}
+      try { if (isCarValid(c) && (!playerCar || !sameCar(c, playerCar))) deleteCarHandle(c); } catch(e) {}
     }
     streamed = {};
     spawnTimeMap = {};
@@ -1336,6 +1339,8 @@ while (true) {
     runStreamer(char);
     log("LOGGER: reloaded, " + cache.length + " entries");
     showTextBox("~y~INI reloaded! ~g~" + cache.length + " ~y~entries");
+    // Drain F7 hold so the reload doesn't fire again on the next frame
+    while (Pad.IsKeyPressed(VK_F7)) wait(0);
   } else if (!f7Now) {
     f7WasDown = false;
   }
