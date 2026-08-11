@@ -160,6 +160,18 @@ function toCar(c) {
   if (typeof c === 'object' && c !== null) return c;
   try { return new Car(c); } catch(e) { return null; }
 }
+// Robust car equality: === first, then .handle, then == coercion.
+// Needed because CLEO Redux may return different wrapper instances for the same vehicle.
+function sameCar(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  try {
+    if (a.handle !== undefined && b.handle !== undefined && a.handle === b.handle) return true;
+    // eslint-disable-next-line eqeqeq
+    if (a == b) return true;
+  } catch(e) {}
+  return false;
+}
 function getCarHandle(char) {
   try {
     if (!char.isInAnyCar()) return null;
@@ -406,10 +418,18 @@ function deleteCarHandle(c) {
     const char   = player.getChar();
     if (char && char.isInAnyCar()) {
       const pc = getCarHandle(char);
-      if (pc && (c === pc || (c.handle && pc.handle && c.handle === pc.handle))) {
+      // Use sameCar() — === alone fails when wrappers are different instances
+      if (sameCar(c, pc)) {
         log("LOGGER: BLOCKED deleteCarHandle — target is player active vehicle!");
         return;
       }
+      // Ultimate safety: ask the game directly if the player is sitting in this car
+      try {
+        if (typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)) {
+          log("LOGGER: BLOCKED deleteCarHandle — player is sitting in target vehicle!");
+          return;
+        }
+      } catch(e) {}
     }
   } catch(e) {}
   try { if (typeof c.delete === 'function') { c.delete(); return; } } catch(e) {}
@@ -699,7 +719,7 @@ function runStreamer(char) {
           if (playerCar && sq < 36.0) {
             continue;
           }
-          clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar);
+          clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar, char);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
             try { nc.setHeading(d.heading); } catch(e) {}
@@ -730,6 +750,8 @@ function runStreamer(char) {
                 }
               }
             }
+            // Restore hydraulics and nitro state after mods are applied
+            applyCarExtras(nc, d.extras);
             streamed[key] = nc;
             spawnTimeMap[key] = Date.now();
             log("LOGGER: Streamed IN vehicle " + (d.name || getVehicleName(d.modelId)) + " at " + d.x.toFixed(1) + "," + d.y.toFixed(1));
@@ -780,6 +802,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
       const tires  = getCarPoppedTires(h);
       const pj     = getCarPaintjob(h);
       const dam    = getCarDamage(h);
+      const extras = getCarExtras(h, mods);
       const newLine = formatMinifiedEntry({
         modelId: d.modelId, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
         primaryColor: clrs.c1, secondaryColor: clrs.c2,
@@ -787,7 +810,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
         paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
         tires: (CFG.saveTires ? tires : []),
         panels: dam.panels, doors: dam.doors,
-        upgrades: mods
+        upgrades: mods, extras: extras
       });
       const oldKey = getUniqueKey(d);
       entries[i] = newLine;
@@ -811,7 +834,7 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
   }
   return false;
 }
-function clearNearbyNonTracked(x, y, z, r, playerCar) {
+function clearNearbyNonTracked(x, y, z, r, playerCar, char) {
   try {
     let next = false;
     for (let i = 0; i < 10; i++) {
@@ -819,11 +842,18 @@ function clearNearbyNonTracked(x, y, z, r, playerCar) {
       if (!c) break;
       const valid = isCarValid(c);
       if (!valid) break;
-      if (playerCar && c === playerCar) { next = true; continue; }
-      if (lastCarHandle && c === lastCarHandle) { next = true; continue; }
+      // Use sameCar() — === fails when wrappers are different object instances
+      if (sameCar(c, playerCar)) { next = true; continue; }
+      if (sameCar(c, lastCarHandle)) { next = true; continue; }
+      // Hard safety: never delete a car the player is physically sitting in
+      try {
+        if (char && typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)) {
+          next = true; continue;
+        }
+      } catch(e) {}
       let isTracked = false;
       for (const k in streamed) {
-        if (streamed[k] && streamed[k] === c) { isTracked = true; break; }
+        if (sameCar(streamed[k], c)) { isTracked = true; break; }
       }
       if (isTracked) { next = true; continue; }
       deleteCarHandle(c);
@@ -838,23 +868,31 @@ function tryClaimCar(car, char) {
     try { if (!sitting && typeof Char !== 'undefined' && typeof Char.IsSittingInCar === 'function') sitting = Char.IsSittingInCar(char, car); } catch(e) {}
     if (!sitting) return;
     const mid  = getCarModelId(car);
-    const cp   = getCarPos(car);
     const ents = cache;
     if (!ents || !ents.length) return;
-    let bestIdx = -1, bestDist = 1e9;
+    // Only claim an entry whose streamed handle is THIS exact car.
+    // Matching by model ID + proximity alone would wrongly claim a
+    // saved entry when the player steals a different car of the same model.
+    let claimIdx = -1;
     for (let i = 0; i < ents.length; i++) {
       const d = parseEntry(ents[i]);
       if (!d || d.modelId !== mid) continue;
-      const sq = (cp.x-d.x)**2 + (cp.y-d.y)**2 + (cp.z-d.z)**2;
-      if (sq < bestDist) { bestDist = sq; bestIdx = i; }
+      const key = getUniqueKey(d);
+      if (!streamed.hasOwnProperty(key)) continue; // not streamed in — can't be this car
+      const h = streamed[key];
+      // Compare handles: must be the exact same car object the player entered
+      if (h === car || (h && car && h.handle !== undefined && h.handle === car.handle)) {
+        claimIdx = i;
+        break;
+      }
     }
-    if (bestIdx !== -1) {
-      const ln  = ents[bestIdx];
+    if (claimIdx !== -1) {
+      const ln  = ents[claimIdx];
       const d   = parseEntry(ln);
       const key = d ? getUniqueKey(d) : "";
       if (key && streamed[key]) delete streamed[key];
-      if (streamed[ln]) delete streamed[ln];
-      ents.splice(bestIdx, 1);
+      if (key) delete spawnTimeMap[key];
+      ents.splice(claimIdx, 1);
       writeDisk(ents);
       cache = ents;
       const coords = d ? (d.x.toFixed(0) + "," + d.y.toFixed(0)) : "";
@@ -911,6 +949,16 @@ function formatMinifiedEntry(d) {
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
+  // Extras field (parts[10]): flags separated by '+'
+  // 'h' = hydraulics, 'n1'/'n3'/'n5' = nitro type
+  const exFlags = [];
+  if (d.extras) {
+    if (d.extras.hydraulics) exFlags.push("h");
+    if (d.extras.nitroModId === 1008) exFlags.push("n1");
+    else if (d.extras.nitroModId === 1009) exFlags.push("n3");
+    else if (d.extras.nitroModId === 1010) exFlags.push("n5");
+  }
+  const exStr = exFlags.join("+");
   return d.modelId + "|" +
          d.x.toFixed(2) + "," + d.y.toFixed(2) + "," + d.z.toFixed(2) + "|" +
          d.heading.toFixed(1) + "|" +
@@ -920,7 +968,8 @@ function formatMinifiedEntry(d) {
          trStr + "|" +
          dmStr + "|" +
          ddStr + "|" +
-         uStr;
+         uStr + "|" +
+         exStr;
 }
 function saveCarExit(car) {
   try {
@@ -946,6 +995,7 @@ function saveCarExit(car) {
     const tires  = getCarPoppedTires(car);
     const pj     = getCarPaintjob(car);
     const dam    = getCarDamage(car);
+    const extras = getCarExtras(car, mods);
     const line = formatMinifiedEntry({
       modelId: mid, x: cp.x, y: cp.y, z: cp.z, heading: hdg,
       primaryColor: clrs.c1, secondaryColor: clrs.c2,
@@ -953,7 +1003,7 @@ function saveCarExit(car) {
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
       tires: (CFG.saveTires ? tires : []),
       panels: dam.panels, doors: dam.doors,
-      upgrades: mods
+      upgrades: mods, extras: extras
     });
     const ents = readDisk();
     ents.push(line);
@@ -1011,13 +1061,22 @@ function parseEntry(line) {
             if (n >= 0 && n <= 5) doors.push(n);
           }
         }
-        const upgradesPart = parts[9] || parts[10] || "";
+        const upgradesPart = parts[9] || "";
         const upgrades = [];
         if (upgradesPart) {
           for (const p of upgradesPart.split(",")) {
             const n = parseInt(p, 10);
             if (n >= 1000) upgrades.push(n);
           }
+        }
+        // parts[10] = extras flags, e.g. "h+n3"
+        const extras = { hydraulics: false, nitroModId: 0 };
+        if (parts[10]) {
+          const flags = parts[10].split("+");
+          extras.hydraulics = flags.indexOf("h") !== -1;
+          if (flags.indexOf("n1") !== -1) extras.nitroModId = 1008;
+          else if (flags.indexOf("n3") !== -1) extras.nitroModId = 1009;
+          else if (flags.indexOf("n5") !== -1) extras.nitroModId = 1010;
         }
         return {
           modelId: mid,
@@ -1034,6 +1093,7 @@ function parseEntry(line) {
           panels: panels,
           doors: doors,
           upgrades: upgrades,
+          extras: extras,
         };
       }
     }
@@ -1167,6 +1227,49 @@ function getCarMods(car, modelId) {
     } catch(e) {}
   }
   return mods;
+}
+// Nitro mod IDs in GTA SA: 1008=x1, 1009=x3, 1010=x5/infinite
+const NITRO_MOD_IDS = [1008, 1009, 1010];
+// Returns a compact extras object: { hydraulics: bool, nitroModId: int|0 }
+function getCarExtras(car, mods) {
+  const extras = { hydraulics: false, nitroModId: 0 };
+  if (!car) return extras;
+  // Hydraulics — check live state via game API
+  try {
+    if (typeof car.doesHaveHydraulics === 'function') {
+      extras.hydraulics = !!car.doesHaveHydraulics();
+    }
+  } catch(e) {}
+  // Nitro — detect from installed mod IDs (most reliable, avoids memory reads)
+  if (mods && mods.length) {
+    for (const id of mods) {
+      if (NITRO_MOD_IDS.indexOf(id) !== -1) {
+        extras.nitroModId = id;
+        break;
+      }
+    }
+  }
+  return extras;
+}
+// Restores hydraulics and nitro on a freshly spawned car.
+function applyCarExtras(car, extras) {
+  if (!car || !extras) return;
+  if (extras.hydraulics) {
+    try {
+      if (typeof car.setHydraulics === 'function') car.setHydraulics(true);
+      else if (typeof Car !== 'undefined' && typeof Car.SetHydraulics === 'function') Car.SetHydraulics(car, true);
+    } catch(e) {}
+  }
+  if (extras.nitroModId) {
+    // giveNonPlayerNitro gives one shot; call multiple times for multi-shot types
+    const shots = extras.nitroModId === 1009 ? 3 : extras.nitroModId === 1010 ? 5 : 1;
+    try {
+      for (let i = 0; i < shots; i++) {
+        if (typeof car.giveNonPlayerNitro === 'function') car.giveNonPlayerNitro();
+        else if (typeof Car !== 'undefined' && typeof Car.GiveNonPlayerNitro === 'function') Car.GiveNonPlayerNitro(car);
+      }
+    } catch(e) {}
+  }
 }
 function gatherAndUpdateAllOnStart() {
   try {
