@@ -76,17 +76,43 @@ function isAircraftModel(mid) {
   return false;
 }
 
-const BIKE_MODEL_IDS = [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 523, 581, 586];
+// Dynamically reads CModelInfo in GTA SA memory to get vehicle type
+// 0=Automobile, 1=MTRUCK, 2=QUAD, 3=HELI, 4=PLANE, 5=BOAT, 6=TRAIN, 7=BIKE, 8=BMX, 9=TRACTOR
+function getVehicleTypeFromMemory(mid) {
+  if (!mid || mid < 400 || mid > 611) return -1;
+  try {
+    let pModelInfo = 0;
+    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+      pModelInfo = Memory.Read(0xA9B0C8 + mid * 4, 4, false);
+    } else if (typeof READ_MEMORY === 'function') {
+      pModelInfo = READ_MEMORY(0xA9B0C8 + mid * 4, 4, false);
+    }
+    if (pModelInfo && pModelInfo > 0x10000) {
+      let vType = -1;
+      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+        vType = Memory.Read(pModelInfo + 0x34, 1, false);
+      } else if (typeof READ_MEMORY === 'function') {
+        vType = READ_MEMORY(pModelInfo + 0x34, 1, false);
+      }
+      return vType;
+    }
+  } catch(e) {}
+  return -1;
+}
 
 function isBikeModel(mid) {
   if (!mid) return false;
-  return BIKE_MODEL_IDS.indexOf(mid) !== -1;
+  const vType = getVehicleTypeFromMemory(mid);
+  if (vType === 7 || vType === 8 || vType === 2) return true; // BIKE, BMX, QUAD
+  return false;
 }
 
 function isAutomobileModel(mid) {
   if (!mid) return false;
-  if (isBoatModel(mid) || isAircraftModel(mid) || isBikeModel(mid)) return false;
-  return true;
+  const vType = getVehicleTypeFromMemory(mid);
+  if (vType === 0 || vType === 1 || vType === 9) return true; // AUTOMOBILE, MTRUCK, TRACTOR
+  if (vType >= 2 && vType <= 8) return false;
+  return !isBoatModel(mid) && !isAircraftModel(mid) && !isBikeModel(mid);
 }
 function isTunableVehicle(mid) {
   if (!mid) return false;
@@ -384,7 +410,7 @@ function applyStoredDamage(c, panels, doors) {
 function getCarPoppedTires(c) {
   if (!c) return [];
   const mid = getCarModelId(c);
-  if (mid === 509 || mid === 481 || mid === 510) return [];
+  if (getVehicleTypeFromMemory(mid) === 8) return []; // Bicycles (BMX) have no burstable tires
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return [];
   const maxTires = isBikeModel(mid) ? 2 : 4;
   const popped = [];
@@ -401,7 +427,7 @@ function getCarPoppedTires(c) {
 function setCarPoppedTires(c, tiresArray) {
   if (!c || !tiresArray || !tiresArray.length) return;
   const mid = getCarModelId(c);
-  if (mid === 509 || mid === 481 || mid === 510) return;
+  if (getVehicleTypeFromMemory(mid) === 8) return; // Bicycles (BMX) have no burstable tires
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return;
   const maxTires = isBikeModel(mid) ? 2 : 4;
   for (const t of tiresArray) {
