@@ -784,7 +784,7 @@ function renderSpawnerMenu(modelSel) {
     return;
   }
 
-  const pageSize = 5;
+  const pageSize = 6;
   const curPage = Math.floor(modelSel / pageSize) + 1;
   const totalPages = Math.ceil(total / pageSize);
   const startPage = Math.floor(modelSel / pageSize) * pageSize;
@@ -837,7 +837,7 @@ function spawnVehicleFromSpawner(modelId, char) {
 
   let playerCar = null;
   try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
-  clearNearbyNonTracked(spX, spY, spZ, 2.5, playerCar, char);
+  clearNearbyNonTracked(spX, spY, spZ, 3.0, playerCar, char);
 
   const car = spawnCarAt(modelId, spX, spY, spZ);
   const name = getVehicleName(modelId);
@@ -887,7 +887,7 @@ function runSpawnerMenu(player, char) {
       break;
     }
 
-    const pageSize = 5;
+    const pageSize = 6;
 
     if (totalModels > 0) {
       let modelChanged = false;
@@ -915,7 +915,8 @@ function runSpawnerMenu(player, char) {
       if (enterN && !enterD) {
         const selectedModel = models[modelSel];
         spawnVehicleFromSpawner(selectedModel, char);
-        break;
+        wait(200);
+        renderSpawnerMenu(modelSel);
       }
     }
 
