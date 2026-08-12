@@ -665,7 +665,7 @@ function renderParkedMenu(entries, sel) {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-  txt += "~w~8/2=Move & Teleport  4/6=Page  F5=Spawner  F6=Exit";
+  txt += "~w~8=Up  2=Down  4/6=Page  5=OK  F5=Spawner  F6=Exit";
   showTextBox(txt);
 }
 function purgeDestroyedEntries() {
@@ -675,7 +675,7 @@ function purgeDestroyedEntries() {
     let modified = false;
     const clean = [];
     for (let i = 0; i < entries.length; i++) {
-      const d = parseEntry(entries[i]);
+      const d    = parseEntry(entries[i]);
       if (!d) continue;
       const key = getUniqueKey(d);
       if (streamed.hasOwnProperty(key)) {
@@ -801,7 +801,7 @@ function renderSpawnerMenu(modelSel) {
       txt += "~w~  " + name + "~n~";
     }
   }
-  txt += "~w~NUM8/2=Move  NUM4/6=Page  NUM5=SPAWN  NUM0/F5=Exit";
+  txt += "~w~8=Up  2=Down  4/6=Page  5=OK  F5=Exit";
   showTextBox(txt);
 }
 
