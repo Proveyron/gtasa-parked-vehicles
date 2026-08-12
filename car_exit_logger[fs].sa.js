@@ -815,20 +815,25 @@ function spawnVehicleFromSpawner(modelId, char) {
   const hdg = getCarHdg(char);
   const rad = hdg * Math.PI / 180;
   
-  let dist = 4.0;
+  let dist = 4.5;
   let zOffset = 0.2;
+  let clearRadius = 4.0;
   if (isBoatModel(modelId)) {
-    dist = 8.0;
+    dist = 8.5;
     zOffset = 1.5;
+    clearRadius = 6.0;
   } else if (isAircraftModel(modelId)) {
-    dist = 8.0;
+    dist = 9.0;
     zOffset = 0.5;
+    clearRadius = 7.0;
   } else if (getVehicleTypeFromMemory(modelId) === 1 || modelId === 403 || modelId === 514 || modelId === 515 || modelId === 443) {
-    dist = 7.0;
+    dist = 7.5;
     zOffset = 0.5;
+    clearRadius = 6.0;
   } else if (isBikeModel(modelId)) {
-    dist = 3.0;
+    dist = 3.5;
     zOffset = 0.2;
+    clearRadius = 3.0;
   }
 
   const spX = pp.x - Math.sin(rad) * dist;
@@ -837,7 +842,16 @@ function spawnVehicleFromSpawner(modelId, char) {
 
   let playerCar = null;
   try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
-  clearNearbyNonTracked(spX, spY, spZ, 3.0, playerCar, char);
+
+  // Force clear any empty vehicle in spawn area (including tracked spawned cars)
+  clearNearbyNonTracked(spX, spY, spZ, clearRadius, playerCar, char, true);
+
+  // Prevent overlapping if an occupied vehicle remains in spawn area
+  if (isSpawnZoneOccupied(spX, spY, spZ, clearRadius * 0.7, playerCar, char)) {
+    showTextBox("~r~Spawn area occupied! Move away to spawn.");
+    log("LOGGER: Car Spawner blocked — spawn area occupied at " + spX.toFixed(1) + "," + spY.toFixed(1));
+    return false;
+  }
 
   const car = spawnCarAt(modelId, spX, spY, spZ);
   const name = getVehicleName(modelId);
@@ -1161,10 +1175,10 @@ function updateParkedCarStateIfNeeded(h, d, i, entries) {
   }
   return false;
 }
-function clearNearbyNonTracked(x, y, z, r, playerCar, char) {
+function clearNearbyNonTracked(x, y, z, r, playerCar, char, forceClearTracked) {
   try {
     let next = false;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 15; i++) {
       const c = World.GetRandomCarInSphereNoSaveRecursive(x, y, z, r, next, false);
       if (!c) break;
       const valid = isCarValid(c);
@@ -1172,21 +1186,47 @@ function clearNearbyNonTracked(x, y, z, r, playerCar, char) {
       // Use sameCar() — === fails when wrappers are different object instances
       if (sameCar(c, playerCar)) { next = true; continue; }
       if (sameCar(c, lastCarHandle)) { next = true; continue; }
-      // Hard safety: never delete a car the player is physically sitting in
+      // Hard safety: never delete a car the player is physically sitting in or occupied car
       try {
         if (char && typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)) {
           next = true; continue;
         }
       } catch(e) {}
+      if (!isCarEmpty(c)) { next = true; continue; }
+
       let isTracked = false;
+      let trackedKey = null;
       for (const k in streamed) {
-        if (sameCar(streamed[k], c)) { isTracked = true; break; }
+        if (sameCar(streamed[k], c)) { isTracked = true; trackedKey = k; break; }
       }
-      if (isTracked) { next = true; continue; }
+      if (isTracked) {
+        if (!forceClearTracked) {
+          next = true;
+          continue;
+        } else {
+          delete streamed[trackedKey];
+          delete spawnTimeMap[trackedKey];
+        }
+      }
       deleteCarHandle(c);
       next = true;
     }
   } catch(e) {}
+}
+
+function isSpawnZoneOccupied(x, y, z, r, playerCar, char) {
+  try {
+    const c = World.GetRandomCarInSphereNoSaveRecursive(x, y, z, r, false, false);
+    if (c && isCarValid(c)) {
+      if (playerCar && sameCar(c, playerCar)) return true;
+      try {
+        if (char && typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)) return true;
+      } catch(e) {}
+      if (!isCarEmpty(c)) return true;
+      return true;
+    }
+  } catch(e) {}
+  return false;
 }
 function tryClaimCar(car, char) {
   try {
