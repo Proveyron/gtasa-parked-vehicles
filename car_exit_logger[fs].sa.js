@@ -1209,7 +1209,7 @@ function clearNearbyNonTracked(x, y, z, r, playerCar, char, forceClearTracked) {
         }
       }
       deleteCarHandle(c);
-      next = true;
+      next = false;
     }
   } catch(e) {}
 }
