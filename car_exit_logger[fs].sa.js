@@ -8,6 +8,8 @@ const CFG = {
   tooltips:    true,
   saveHealth:  true,
   saveTires:   true,
+  menuKey:     117,
+  spawnerKey:  116,
 };
 const VK_F5    = 116;
 const VK_F6    = 117;
@@ -24,6 +26,7 @@ const VK_NUM2  = 98;
 const VK_NUM4  = 100;
 const VK_NUM6  = 102;
 const VK_NUM5  = 101;
+const VK_NUM0  = 96;
 const VK_KEY_W = 87;
 const VK_KEY_S = 83;
 const VK_KEY_A = 65;
@@ -150,7 +153,111 @@ function getVehicleName(modelId) {
       if (formatted && formatted.length > 2) return formatted;
     }
   } catch(e) {}
+  if (VEHICLE_NAMES[modelId]) return VEHICLE_NAMES[modelId];
   return "" + modelId;
+}
+
+// Unsafe vehicle models (Trailers, Trains/Trams, RC models) that must never be spawned
+const UNSAFE_VEHICLE_MODELS = {
+  // Trailers (non-drivable / physics issues when standalone)
+  435: 1, 450: 1, 584: 1, 591: 1, 606: 1, 607: 1, 608: 1, 610: 1, 611: 1,
+  // Trains & Trams
+  449: 1, 537: 1, 538: 1, 569: 1, 570: 1, 590: 1,
+  // RC Mini Vehicles
+  441: 1, 464: 1, 465: 1, 501: 1, 564: 1, 594: 1
+};
+
+function isSafeDrivableVehicle(mid) {
+  if (!mid || typeof mid !== 'number' || isNaN(mid)) return false;
+  if (mid < 400 || mid > 611) return false;
+  return !UNSAFE_VEHICLE_MODELS[mid];
+}
+
+const VEHICLE_NAMES = {
+  400: 'Landstalker', 401: 'Bravura', 402: 'Buffalo', 403: 'Linerunner', 404: 'Perennial', 405: 'Sentinel', 406: 'Dump', 407: 'Firetruck', 408: 'Trashmaster', 409: 'Stretch',
+  410: 'Manana', 411: 'Infernus', 412: 'Voodoo', 413: 'Pony', 414: 'Mule', 415: 'Cheetah', 416: 'Ambulance', 417: 'Leviathan', 418: 'Moonbeam', 419: 'Esperanto',
+  420: 'Taxi', 421: 'Washington', 422: 'Bobcat', 423: 'Mr Whoopee', 424: 'BF Injection', 425: 'Hunter', 426: 'Premier', 427: 'Enforcer', 428: 'Securicar', 429: 'Banshee',
+  430: 'Predator', 431: 'Bus', 432: 'Rhino', 433: 'Barracks', 434: 'Hotknife', 436: 'Previon', 437: 'Coach', 438: 'Cabbie', 439: 'Stallion', 440: 'Rumpo',
+  442: 'Romero', 443: 'Packer', 444: 'Monster', 445: 'Admiral', 446: 'Squalo', 447: 'Sea Sparrow', 448: 'Pizzaboy', 451: 'Turismo', 452: 'Speeder', 453: 'Reefer',
+  454: 'Tropic', 455: 'Flatbed', 456: 'Yankee', 457: 'Caddy', 458: 'Solair', 459: 'Topfun', 460: 'Skimmer', 461: 'PCJ-600', 462: 'Faggio', 463: 'Freeway',
+  466: 'Glendale', 467: 'Oceanic', 468: 'Sanchez', 469: 'Sparrow', 470: 'Patriot', 471: 'Quad', 472: 'Coastguard', 473: 'Dinghy', 474: 'Hermes', 475: 'Sabre',
+  476: 'Rustler', 477: 'ZR-350', 478: 'Walton', 479: 'Regina', 480: 'Comet', 481: 'BMX', 482: 'Burrito', 483: 'Camper', 484: 'Marquis', 485: 'Baggage',
+  486: 'Dozer', 487: 'Maverick', 488: 'SAN Maverick', 489: 'Rancher', 490: 'FBI Rancher', 491: 'Virgo', 492: 'Greenwood', 493: 'Jetmax', 494: 'Hotring Racer',
+  495: 'Sandking', 496: 'Blista Compact', 497: 'Police Maverick', 498: 'Boxville', 499: 'Benson', 500: 'Mesa', 502: 'Hotring Racer 2', 503: 'Hotring Racer 3',
+  504: 'Bloodring Banger', 505: 'Rancher Lure', 506: 'Super GT', 507: 'Elegant', 508: 'Journey', 509: 'Bike', 510: 'Mountain Bike', 511: 'Beagle', 512: 'Cropduster',
+  513: 'Stuntplane', 514: 'Tanker', 515: 'Roadtrain', 516: 'Nebula', 517: 'Majestic', 518: 'Buccaneer', 519: 'Shamal', 520: 'Hydra', 521: 'FCR-900',
+  522: 'NRG-500', 523: 'HPV-1000', 524: 'Cement Truck', 525: 'Towtruck', 526: 'Fortune', 527: 'Cadrona', 528: 'FBI Truck', 529: 'Willard', 530: 'Forklift',
+  531: 'Tractor', 532: 'Combine Harvester', 533: 'Feltzer', 534: 'Remington', 535: 'Slamvan', 536: 'Blade', 539: 'Vortex', 540: 'Vincent', 541: 'Bullet',
+  542: 'Clover', 543: 'Sadler', 544: 'Firetruck LA', 545: 'Hustler', 546: 'Intruder', 547: 'Primo', 548: 'Cargobob', 549: 'Tampa', 550: 'Sunrise',
+  551: 'Merit', 552: 'Utility Van', 553: 'Nevada', 554: 'Yosemite', 555: 'Windsor', 556: 'Monster A', 557: 'Monster B', 558: 'Uranus', 559: 'Jester',
+  560: 'Sultan', 561: 'Stratum', 562: 'Elegy', 563: 'Raindance', 565: 'Flash', 566: 'Tahoma', 567: 'Savanna', 568: 'Bandito', 571: 'Kart',
+  572: 'Mower', 573: 'Dune', 574: 'Sweeper', 575: 'Broadway', 576: 'Tornado', 577: 'AT-400', 578: 'DFT-30', 579: 'Huntley', 580: 'Stafford',
+  581: 'BF-400', 582: 'Newsvan', 583: 'Tug', 585: 'Emperor', 586: 'Wayfarer', 587: 'Euro', 588: 'Hotdog', 589: 'Club', 592: 'Andromada',
+  593: 'Dodo', 595: 'Launch', 596: 'Police Car LS', 597: 'Police Car SF', 598: 'Police Car LV', 599: 'Police Ranger', 600: 'Picador', 601: 'S.W.A.T. Tank',
+  602: 'Alpha', 603: 'Phoenix', 604: 'Glendale Damaged', 605: 'Sadler Damaged', 609: 'Boxville Black'
+};
+
+const SPAWNER_CATEGORIES = [
+  {
+    name: "Sports & Super Cars",
+    models: [402, 411, 415, 429, 434, 451, 477, 480, 494, 502, 503, 506, 533, 541, 555, 587, 602, 603]
+  },
+  {
+    name: "Tunable Street Racers",
+    models: [558, 559, 560, 561, 562, 565]
+  },
+  {
+    name: "Lowriders & Classics",
+    models: [412, 474, 534, 535, 536, 545, 566, 567, 575, 576, 580]
+  },
+  {
+    name: "Sedans & Saloons",
+    models: [401, 404, 405, 409, 410, 419, 421, 426, 436, 439, 445, 458, 466, 467, 475, 479, 491, 492, 496, 507, 516, 517, 518, 526, 527, 529, 540, 542, 546, 547, 549, 550, 551, 585, 589, 604]
+  },
+  {
+    name: "Off-Road & SUVs",
+    models: [400, 424, 444, 470, 489, 495, 500, 504, 505, 556, 557, 568, 579]
+  },
+  {
+    name: "Motorcycles & Bikes",
+    models: [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 581, 586]
+  },
+  {
+    name: "Trucks & Heavy",
+    models: [403, 406, 408, 414, 443, 455, 456, 486, 499, 514, 515, 524, 525, 530, 531, 532, 573, 574, 578, 583]
+  },
+  {
+    name: "Vans & Pickups",
+    models: [413, 418, 422, 423, 440, 442, 457, 459, 478, 482, 483, 485, 498, 508, 543, 552, 554, 571, 572, 582, 588, 600, 605, 609]
+  },
+  {
+    name: "Emergency & Military",
+    models: [407, 416, 420, 427, 428, 431, 432, 433, 437, 438, 490, 523, 528, 544, 596, 597, 598, 599, 601]
+  },
+  {
+    name: "Aircraft & Helicopters",
+    models: [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593]
+  },
+  {
+    name: "Boats & Watercraft",
+    models: [430, 446, 452, 453, 454, 472, 473, 484, 493, 539, 595]
+  },
+  {
+    name: "All Drivable Vehicles (A-Z)",
+    models: []
+  }
+];
+
+let cachedAllSafeModels = null;
+function getAllSafeVehiclesList() {
+  if (cachedAllSafeModels) return cachedAllSafeModels;
+  const list = [];
+  for (let id = 400; id <= 611; id++) {
+    if (isSafeDrivableVehicle(id)) list.push(id);
+  }
+  list.sort((a, b) => getVehicleName(a).toLowerCase().localeCompare(getVehicleName(b).toLowerCase()));
+  cachedAllSafeModels = list;
+  return cachedAllSafeModels;
 }
 function getVehicleGxtKey(modelId) {
   if (!modelId) return "DUMMY";
@@ -511,7 +618,8 @@ function drainKeys() {
     Pad.IsKeyPressed(VK_LEFT)  || Pad.IsKeyPressed(VK_KEY_A) || Pad.IsKeyPressed(VK_NUM4) ||
     Pad.IsKeyPressed(VK_RIGHT) || Pad.IsKeyPressed(VK_KEY_D) || Pad.IsKeyPressed(VK_NUM6) ||
     Pad.IsKeyPressed(VK_ENTER) || Pad.IsKeyPressed(VK_SPACE) || Pad.IsKeyPressed(VK_NUM5) ||
-    Pad.IsKeyPressed(VK_ESC)   || Pad.IsKeyPressed(VK_F6)    || Pad.IsKeyPressed(VK_F7)
+    Pad.IsKeyPressed(VK_ESC)   || Pad.IsKeyPressed(VK_F5)    || Pad.IsKeyPressed(VK_F6)    || Pad.IsKeyPressed(VK_F7) ||
+    (CFG.spawnerKey && Pad.IsKeyPressed(CFG.spawnerKey)) || (CFG.menuKey && Pad.IsKeyPressed(CFG.menuKey))
   ) wait(0);
 }
 function checkCheatCodes(player, char) {
@@ -557,7 +665,7 @@ function renderParkedMenu(entries, sel) {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-  txt += "~w~8/2=Move & Teleport  4/6=Page  F6=Exit";
+  txt += "~w~8/2=Move & Teleport  4/6=Page  F5=Spawner  F6=Exit";
   showTextBox(txt);
 }
 function purgeDestroyedEntries() {
@@ -616,7 +724,12 @@ function runMenu(player, char) {
     const leftN  = Pad.IsKeyPressed(VK_NUM4);
     const rightN = Pad.IsKeyPressed(VK_NUM6);
     const enterN = Pad.IsKeyPressed(VK_NUM5);
-    const f6N    = Pad.IsKeyPressed(VK_F6);
+    const f6N    = Pad.IsKeyPressed(VK_F6) || (CFG.menuKey && Pad.IsKeyPressed(CFG.menuKey));
+    const f5N    = Pad.IsKeyPressed(VK_F5) || (CFG.spawnerKey && Pad.IsKeyPressed(CFG.spawnerKey));
+    if (f5N) {
+      runSpawnerMenu(player, char);
+      break;
+    }
     if (f6N && !f6D) break;
     let changed = false;
     if (upN && !upD) {
@@ -662,6 +775,163 @@ function clearMenuBox() {
       clearHelp();
     }
   } catch(e) {}
+}
+
+function renderSpawnerMenu(modelSel) {
+  const models = getAllSafeVehiclesList();
+  const total = models.length;
+  if (total === 0) {
+    showTextBox("~y~CAR SPAWNER~n~~r~No safe vehicles found.~n~~w~F5=Exit");
+    return;
+  }
+
+  const pageSize = 5;
+  const curPage = Math.floor(modelSel / pageSize) + 1;
+  const totalPages = Math.ceil(total / pageSize);
+  const startPage = Math.floor(modelSel / pageSize) * pageSize;
+  const endPage = Math.min(startPage + pageSize, total);
+
+  let txt = "~y~CAR SPAWNER (A-Z) (" + curPage + "/" + totalPages + ")~n~";
+  for (let i = startPage; i < endPage; i++) {
+    const mid = models[i];
+    const name = getVehicleName(mid);
+    if (i === modelSel) {
+      txt += "~g~> " + name + "~n~";
+    } else {
+      txt += "~w~  " + name + "~n~";
+    }
+  }
+  txt += "~w~NUM8/2=Move  NUM4/6=Page  NUM5=SPAWN  NUM0/F5=Exit";
+  showTextBox(txt);
+}
+
+function spawnVehicleFromSpawner(modelId, char) {
+  if (!isSafeDrivableVehicle(modelId)) {
+    const name = getVehicleName(modelId);
+    showTextBox("~r~Cannot spawn " + name + " — vehicle is not safe/drivable!");
+    log("LOGGER: Blocked unsafe vehicle spawn attempt: " + modelId);
+    return false;
+  }
+  const pp = char.getCoordinates();
+  if (!pp) return false;
+  const hdg = getCarHdg(char);
+  const rad = hdg * Math.PI / 180;
+  
+  let dist = 4.0;
+  let zOffset = 0.2;
+  if (isBoatModel(modelId)) {
+    dist = 8.0;
+    zOffset = 1.5;
+  } else if (isAircraftModel(modelId)) {
+    dist = 8.0;
+    zOffset = 0.5;
+  } else if (getVehicleTypeFromMemory(modelId) === 1 || modelId === 403 || modelId === 514 || modelId === 515 || modelId === 443) {
+    dist = 7.0;
+    zOffset = 0.5;
+  } else if (isBikeModel(modelId)) {
+    dist = 3.0;
+    zOffset = 0.2;
+  }
+
+  const spX = pp.x - Math.sin(rad) * dist;
+  const spY = pp.y + Math.cos(rad) * dist;
+  const spZ = pp.z + zOffset;
+
+  let playerCar = null;
+  try { if (char.isInAnyCar()) playerCar = getCarHandle(char); } catch(e) {}
+  clearNearbyNonTracked(spX, spY, spZ, 2.5, playerCar, char);
+
+  const car = spawnCarAt(modelId, spX, spY, spZ);
+  const name = getVehicleName(modelId);
+  if (car) {
+    try { car.setHeading(hdg); } catch(e) {}
+    if (CFG.unlockDoors && isAutomobileModel(modelId)) {
+      try { car.lockDoors(1); } catch(e) {}
+    }
+    log("LOGGER: Car Spawner spawned " + name + " (" + modelId + ") at " + spX.toFixed(1) + "," + spY.toFixed(1));
+    if (CFG.tooltips) {
+      showTextBox("~g~Spawned ~y~" + name + "~g~!");
+    }
+    return true;
+  } else {
+    showTextBox("~r~Failed to spawn ~y~" + name + "~r~!");
+    log("LOGGER: Car Spawner failed to spawn model " + modelId);
+    return false;
+  }
+}
+
+function runSpawnerMenu(player, char) {
+  drainKeys();
+  let modelSel = 0;
+  const models = getAllSafeVehiclesList();
+  const totalModels = models.length;
+
+  let upD = false, downD = false;
+  let leftD = false, rightD = false;
+  let enterD = false, f5D = true;
+
+  renderSpawnerMenu(modelSel);
+
+  while (true) {
+    wait(0);
+    if (char.isInAnyCar() || player.isDead()) {
+      break;
+    }
+
+    const upN    = Pad.IsKeyPressed(VK_NUM8);
+    const downN  = Pad.IsKeyPressed(VK_NUM2);
+    const leftN  = Pad.IsKeyPressed(VK_NUM4);
+    const rightN = Pad.IsKeyPressed(VK_NUM6);
+    const enterN = Pad.IsKeyPressed(VK_NUM5);
+    const f5N    = Pad.IsKeyPressed(VK_NUM0) || Pad.IsKeyPressed(VK_F5) || (CFG.spawnerKey && Pad.IsKeyPressed(CFG.spawnerKey)) || Pad.IsKeyPressed(VK_ESC);
+
+    if (f5N && !f5D) {
+      break;
+    }
+
+    const pageSize = 5;
+
+    if (totalModels > 0) {
+      let modelChanged = false;
+
+      if (upN && !upD) {
+        modelSel = (modelSel - 1 + totalModels) % totalModels;
+        modelChanged = true;
+      }
+      if (downN && !downD) {
+        modelSel = (modelSel + 1) % totalModels;
+        modelChanged = true;
+      }
+      if (leftN && !leftD) {
+        modelSel = Math.max(0, modelSel - pageSize);
+        modelChanged = true;
+      }
+      if (rightN && !rightD) {
+        modelSel = Math.min(totalModels - 1, modelSel + pageSize);
+        modelChanged = true;
+      }
+      if (modelChanged) {
+        renderSpawnerMenu(modelSel);
+      }
+
+      if (enterN && !enterD) {
+        const selectedModel = models[modelSel];
+        spawnVehicleFromSpawner(selectedModel, char);
+        break;
+      }
+    }
+
+    upD    = upN;
+    downD  = downN;
+    leftD  = leftN;
+    rightD = rightN;
+    enterD = enterN;
+    f5D    = f5N;
+  }
+
+  clearMenuBox();
+  drainKeys();
+  f5WasDown = true;
 }
 function getTeleportOffset(mid) {
   if (isBoatModel(mid)) return { dist: 0.0, zOffset: 1.5 };
@@ -1267,6 +1537,10 @@ function loadConfig() {
     if (h !== null && h !== undefined) CFG.saveHealth = (h === 1);
     const pt = IniFile.ReadInt(CONFIG_PATH, "Settings", "SavePoppedTires");
     if (pt !== null && pt !== undefined) CFG.saveTires = (pt === 1);
+    const mk = IniFile.ReadInt(CONFIG_PATH, "Settings", "MenuKeyCode");
+    if (mk && mk > 0) CFG.menuKey = mk; else CFG.menuKey = VK_F6;
+    const sk = IniFile.ReadInt(CONFIG_PATH, "Settings", "SpawnerKeyCode");
+    if (sk && sk > 0) CFG.spawnerKey = sk; else CFG.spawnerKey = VK_F5;
   } catch(e) {
     log("LOGGER: loadConfig error: " + (e.stack || e));
   }
@@ -1364,7 +1638,7 @@ loadConfig();
 gatherAndUpdateAllOnStart();
 log("LOGGER: initialized with " + cache.length + " parked entries");
 wait(500);
-showTextBox("~y~Car Exit Logger~n~~w~F6=menu  F7=reload INI");
+showTextBox("~y~Car Exit Logger~n~~w~F5=spawner  F6=menu  F7=reload INI");
 while (true) {
   wait(0);
   const player = new Player(0);
@@ -1399,7 +1673,21 @@ while (true) {
   } else if (!f7Now) {
     f7WasDown = false;
   }
-  const f6Now         = Pad.IsKeyPressed(VK_F6);
+  const f5Now         = Pad.IsKeyPressed(CFG.spawnerKey || VK_F5);
+  const f5JustPressed = f5Now && !f5WasDown;
+  f5WasDown           = f5Now;
+  if (f5JustPressed) {
+    if (char.isInAnyCar()) {
+      showTextBox("~r~Cannot open spawner in a vehicle!~n~~w~Get out on foot first.");
+      log("LOGGER: Spawner open blocked — player is in a vehicle");
+    } else {
+      runSpawnerMenu(player, char);
+      drainKeys();
+      f5WasDown = false;
+    }
+    continue;
+  }
+  const f6Now         = Pad.IsKeyPressed(CFG.menuKey || VK_F6);
   const f6JustPressed = f6Now && !f6WasDown;
   f6WasDown           = f6Now;
   if (f6JustPressed) {
