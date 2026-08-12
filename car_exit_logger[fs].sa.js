@@ -646,7 +646,7 @@ function checkCheatCodes(player, char) {
 function renderParkedMenu(entries, sel) {
   const total = entries ? entries.length : 0;
   if (total === 0) {
-    showTextBox("~y~PARKED VEHICLES GARAGE~n~~r~No saved vehicles in storage.~n~~w~Press F6 to exit.");
+    showTextBox("~y~PARKED VEHICLES GARAGE~n~~r~No saved vehicles in storage.");
     return;
   }
   const pageSize   = 5;
@@ -665,7 +665,6 @@ function renderParkedMenu(entries, sel) {
       txt += "~w~  " + (i + 1) + ". " + name + "~n~";
     }
   }
-  txt += "~w~8=Up  2=Down  5=OK  F5=Spawner  F6=Exit";
   showTextBox(txt);
 }
 function purgeDestroyedEntries() {
@@ -781,7 +780,7 @@ function renderSpawnerMenu(modelSel) {
   const models = getAllSafeVehiclesList();
   const total = models.length;
   if (total === 0) {
-    showTextBox("~y~CAR SPAWNER~n~~r~No safe vehicles found.~n~~w~F5=Exit");
+    showTextBox("~y~CAR SPAWNER~n~~r~No safe vehicles found.");
     return;
   }
 
@@ -801,7 +800,6 @@ function renderSpawnerMenu(modelSel) {
       txt += "~w~  " + name + "~n~";
     }
   }
-  txt += "~w~8=Up  2=Down  5=OK  F5=Exit";
   showTextBox(txt);
 }
 
