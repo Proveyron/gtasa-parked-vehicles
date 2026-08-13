@@ -1178,21 +1178,39 @@ function tryClaimCar(car, char) {
     if (!ents || !ents.length) return;
 
     let claimIdx = -1;
+
+    // Pass 1: Direct entity handle match in streamed table
     for (let i = 0; i < ents.length; i++) {
       const d = parseEntry(ents[i]);
       if (!d || d.modelId !== mid) continue;
       const key = getUniqueKey(d);
       const h = streamed[key];
-      
-      const dx = cp.x - d.x, dy = cp.y - d.y, dz = cp.z - d.z;
-      const distSq = dx*dx + dy*dy + dz*dz;
-      
-      // Match if streamed handle matches OR vehicle is within 4.0m of parked position
-      if ((h && sameCar(h, car)) || distSq <= 16.0) {
+      if (h && sameCar(h, car)) {
         claimIdx = i;
         break;
       }
     }
+
+    // Pass 2: Spatial proximity match if handle not bound yet (closest entry within 4.0m)
+    if (claimIdx === -1) {
+      let closestDistSq = 16.0; // 4.0m max radius
+      for (let i = 0; i < ents.length; i++) {
+        const d = parseEntry(ents[i]);
+        if (!d || d.modelId !== mid) continue;
+        const key = getUniqueKey(d);
+        const h = streamed[key];
+        // Skip entry if bound to a different active entity handle
+        if (h && isCarValid(h) && !sameCar(h, car)) continue;
+
+        const dx = cp.x - d.x, dy = cp.y - d.y, dz = cp.z - d.z;
+        const distSq = dx*dx + dy*dy + dz*dz;
+        if (distSq < closestDistSq) {
+          closestDistSq = distSq;
+          claimIdx = i;
+        }
+      }
+    }
+
     if (claimIdx !== -1) {
       const ln  = ents[claimIdx];
       const d   = parseEntry(ln);
@@ -1202,12 +1220,12 @@ function tryClaimCar(car, char) {
       ents.splice(claimIdx, 1);
       writeDisk(ents);
       cache = ents;
-      const coords = d ? (d.x.toFixed(0) + "," + d.y.toFixed(0)) : "";
-      log("LOGGER: claimed vehicle at " + coords + ", entry removed");
-      if (CFG.tooltips) showTextBox("~y~Claimed vehicle! ~g~Entry removed.");
+      const name = d ? (d.name || getVehicleName(mid)) : "vehicle";
+      log("LOGGER: Claimed parked " + name + " (Entry " + claimIdx + " removed)");
+      if (CFG.tooltips) showTextBox("~y~Claimed ~g~" + name + "~n~~w~Entry removed from storage.");
     }
   } catch(e) {
-    log("LOGGER: claim error: " + (e.stack || e));
+    log("LOGGER: tryClaimCar error: " + (e.stack || e));
   }
 }
 function runPending(char) {
