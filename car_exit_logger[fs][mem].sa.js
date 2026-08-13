@@ -219,22 +219,37 @@ let pendingSaveMenuMs    = 0;
 
 function openSaveMenu() {
   log("LOGGER: Triggering Game Save Menu after successful mission completion...");
-  const fns = [
-    typeof SHOW_SAVE_SCREEN === 'function' ? SHOW_SAVE_SCREEN : null,
-    typeof showSaveScreen === 'function' ? showSaveScreen : null,
-    typeof ACTIVATE_SAVE_MENU === 'function' ? ACTIVATE_SAVE_MENU : null,
-    typeof activateSaveMenu === 'function' ? activateSaveMenu : null
-  ];
-  for (const fn of fns) {
-    if (fn) {
-      try {
-        fn();
-        if (CFG.tooltips) showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
-        return true;
-      } catch(e) {}
+  let opened = false;
+  try {
+    if (typeof Memory !== 'undefined' && typeof Memory.Write === 'function') {
+      Memory.Write(0xBA677B, 1, 1, false);
+      opened = true;
+    } else if (typeof WRITE_MEMORY === 'function') {
+      WRITE_MEMORY(0xBA677B, 1, 1, false);
+      opened = true;
+    }
+  } catch(e) {}
+  if (!opened) {
+    const fns = [
+      typeof SHOW_SAVE_SCREEN === 'function' ? SHOW_SAVE_SCREEN : null,
+      typeof showSaveScreen === 'function' ? showSaveScreen : null,
+      typeof ACTIVATE_SAVE_MENU === 'function' ? ACTIVATE_SAVE_MENU : null,
+      typeof activateSaveMenu === 'function' ? activateSaveMenu : null
+    ];
+    for (const fn of fns) {
+      if (fn) {
+        try {
+          fn();
+          opened = true;
+          break;
+        } catch(e) {}
+      }
     }
   }
-  return false;
+  if (opened && CFG.tooltips) {
+    showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
+  }
+  return opened;
 }
 
 function isOnMission() {
@@ -429,16 +444,14 @@ function getCarSpd(c) {
   return 0;
 }
 function getCarHealth(c) {
-  if (!c) return 1000;
+  if (!c || !isCarValid(c)) return 0;
   try {
     const obj = toCar(c);
     let val = undefined;
     if (obj && typeof obj.getHealth === 'function') val = obj.getHealth();
     if (val !== undefined && val !== null && !isNaN(+val)) return Math.round(+val);
-  } catch(e) {
-    log("LOGGER: getCarHealth error: " + (e.stack || e));
-  }
-  return 1000;
+  } catch(e) {}
+  return 0;
 }
 function setCarHealth(c, health) {
   if (!c || health <= 0) return;
@@ -1782,28 +1795,30 @@ while (true) {
   } else if (wasInCar) {
     wasInCar = false;
     log("LOGGER: Exited vehicle, checking handle...");
-    if (lastCarHandle) {
+    if (lastCarHandle && isCarValid(lastCarHandle)) {
       try {
-        const hp = getCarHealth(lastCarHandle);
         const isMission = lastCarIsMission || (CFG.preventMissionVehicles && isMissionVehicle(lastCarHandle));
         if (isMission) {
           const vMid = getCarModelId(lastCarHandle);
           const vName = getVehicleName(vMid);
           log("LOGGER: Exited mission vehicle / during mission — ignored & discarded (" + vName + ")");
           if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
-        } else if (hp > 250 && isCarUsable(lastCarHandle)) {
-          log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
-          pending.push({ car: lastCarHandle, t: Date.now() });
         } else {
-          log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
-          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
+          const hp = getCarHealth(lastCarHandle);
+          if (hp > 250 && isCarUsable(lastCarHandle)) {
+            log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
+            pending.push({ car: lastCarHandle, t: Date.now() });
+          } else {
+            log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
+            if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
+          }
         }
       } catch(e) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
       }
-      lastCarHandle = null;
-      lastCarIsMission = false;
     }
+    lastCarHandle = null;
+    lastCarIsMission = false;
   }
   runPending(char);
   runStreamer(char);
