@@ -81,27 +81,20 @@ function isAircraftModel(mid) {
   return false;
 }
 
+function readMem(addr, size = 4) {
+  try {
+    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') return Memory.Read(addr, size, false);
+    if (typeof READ_MEMORY === 'function') return READ_MEMORY(addr, size, false);
+  } catch(e) {}
+  return 0;
+}
+
 // Dynamically reads CModelInfo in GTA SA memory to get vehicle type
 // 0=Automobile, 1=MTRUCK, 2=QUAD, 3=HELI, 4=PLANE, 5=BOAT, 6=TRAIN, 7=BIKE, 8=BMX, 9=TRACTOR
 function getVehicleTypeFromMemory(mid) {
   if (!mid || mid < 400 || mid > 611) return -1;
-  try {
-    let pModelInfo = 0;
-    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-      pModelInfo = Memory.Read(0xA9B0C8 + mid * 4, 4, false);
-    } else if (typeof READ_MEMORY === 'function') {
-      pModelInfo = READ_MEMORY(0xA9B0C8 + mid * 4, 4, false);
-    }
-    if (pModelInfo && pModelInfo > 0x10000) {
-      let vType = -1;
-      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-        vType = Memory.Read(pModelInfo + 0x34, 1, false);
-      } else if (typeof READ_MEMORY === 'function') {
-        vType = READ_MEMORY(pModelInfo + 0x34, 1, false);
-      }
-      return vType;
-    }
-  } catch(e) {}
+  const pModelInfo = readMem(0xA9B0C8 + mid * 4, 4);
+  if (pModelInfo > 0x10000) return readMem(pModelInfo + 0x34, 1);
   return -1;
 }
 
@@ -199,57 +192,6 @@ const VEHICLE_NAMES = {
   602: 'Alpha', 603: 'Phoenix', 604: 'Glendale Damaged', 605: 'Sadler Damaged', 609: 'Boxville Black'
 };
 
-const SPAWNER_CATEGORIES = [
-  {
-    name: "Sports & Super Cars",
-    models: [402, 411, 415, 429, 434, 451, 477, 480, 494, 502, 503, 506, 533, 541, 555, 587, 602, 603]
-  },
-  {
-    name: "Tunable Street Racers",
-    models: [558, 559, 560, 561, 562, 565]
-  },
-  {
-    name: "Lowriders & Classics",
-    models: [412, 474, 534, 535, 536, 545, 566, 567, 575, 576, 580]
-  },
-  {
-    name: "Sedans & Saloons",
-    models: [401, 404, 405, 409, 410, 419, 421, 426, 436, 439, 445, 458, 466, 467, 475, 479, 491, 492, 496, 507, 516, 517, 518, 526, 527, 529, 540, 542, 546, 547, 549, 550, 551, 585, 589, 604]
-  },
-  {
-    name: "Off-Road & SUVs",
-    models: [400, 424, 444, 470, 489, 495, 500, 504, 505, 556, 557, 568, 579]
-  },
-  {
-    name: "Motorcycles & Bikes",
-    models: [448, 461, 462, 463, 468, 471, 481, 509, 510, 521, 522, 581, 586]
-  },
-  {
-    name: "Trucks & Heavy",
-    models: [403, 406, 408, 414, 443, 455, 456, 486, 499, 514, 515, 524, 525, 530, 531, 532, 573, 574, 578, 583]
-  },
-  {
-    name: "Vans & Pickups",
-    models: [413, 418, 422, 423, 440, 442, 457, 459, 478, 482, 483, 485, 498, 508, 543, 552, 554, 571, 572, 582, 588, 600, 605, 609]
-  },
-  {
-    name: "Emergency & Military",
-    models: [407, 416, 420, 427, 428, 431, 432, 433, 437, 438, 490, 523, 528, 544, 596, 597, 598, 599, 601]
-  },
-  {
-    name: "Aircraft & Helicopters",
-    models: [417, 425, 447, 460, 469, 476, 487, 488, 497, 511, 512, 513, 519, 520, 548, 553, 563, 577, 592, 593]
-  },
-  {
-    name: "Boats & Watercraft",
-    models: [430, 446, 452, 453, 454, 472, 473, 484, 493, 539, 595]
-  },
-  {
-    name: "All Drivable Vehicles (A-Z)",
-    models: []
-  }
-];
-
 let cachedAllSafeModels = null;
 function getAllSafeVehiclesList() {
   if (cachedAllSafeModels) return cachedAllSafeModels;
@@ -261,31 +203,12 @@ function getAllSafeVehiclesList() {
   cachedAllSafeModels = list;
   return cachedAllSafeModels;
 }
-function getVehicleGxtKey(modelId) {
-  if (!modelId) return "DUMMY";
-  try {
-    let key = "";
-    if (typeof GetNameOfVehicleModel === 'function') {
-      key = GetNameOfVehicleModel(modelId);
-    } else if (typeof Car !== 'undefined' && typeof Car.GetNameOfModel === 'function') {
-      key = Car.GetNameOfModel(modelId);
-    }
-    if (key && key.trim().length > 0) {
-      key = key.trim().toUpperCase();
-      if (key.length > 7) key = key.substring(0, 7);
-      return key;
-    }
-  } catch(e) {}
-  return "DUMMY";
-}
+
 let wasInCar         = false;
 let fireNotified     = false;
 let lastCarHandle    = null;
 let lastCarIsMission = false;
 let pending          = [];
-let lastPendingMs    = 0;
-let lastStreamerMs   = 0;
-let lastFireCheckMs  = 0;
 let streamed         = {};
 let spawnTimeMap     = {};
 let cache            = [];
@@ -296,56 +219,29 @@ let pendingSaveMenuMs    = 0;
 
 function openSaveMenu() {
   log("LOGGER: Triggering Game Save Menu after successful mission completion...");
-  let opened = false;
-  try {
-    if (typeof SHOW_SAVE_SCREEN === 'function') {
-      SHOW_SAVE_SCREEN();
-      opened = true;
+  const fns = [
+    typeof SHOW_SAVE_SCREEN === 'function' ? SHOW_SAVE_SCREEN : null,
+    typeof showSaveScreen === 'function' ? showSaveScreen : null,
+    typeof ACTIVATE_SAVE_MENU === 'function' ? ACTIVATE_SAVE_MENU : null,
+    typeof activateSaveMenu === 'function' ? activateSaveMenu : null
+  ];
+  for (const fn of fns) {
+    if (fn) {
+      try {
+        fn();
+        if (CFG.tooltips) showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
+        return true;
+      } catch(e) {}
     }
-  } catch(e) {}
-  if (!opened) {
-    try {
-      if (typeof showSaveScreen === 'function') {
-        showSaveScreen();
-        opened = true;
-      }
-    } catch(e) {}
   }
-  if (!opened) {
-    try {
-      if (typeof ACTIVATE_SAVE_MENU === 'function') {
-        ACTIVATE_SAVE_MENU();
-        opened = true;
-      }
-    } catch(e) {}
-  }
-  if (!opened) {
-    try {
-      if (typeof activateSaveMenu === 'function') {
-        activateSaveMenu();
-        opened = true;
-      }
-    } catch(e) {}
-  }
-  if (opened && CFG.tooltips) {
-    showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
-  }
-  return opened;
+  return false;
 }
 
 function isOnMission() {
-  try {
-    let onM = 0;
-    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-      onM = Memory.Read(0xA444A0, 1, false);
-    } else if (typeof READ_MEMORY === 'function') {
-      onM = READ_MEMORY(0xA444A0, 1, false);
-    }
-    if (onM && onM !== 0) return true;
-  } catch(e) {}
+  if (readMem(0xA444A0, 1) !== 0) return true;
   try {
     if (typeof Script !== 'undefined' && typeof Script.IsOnMission === 'function') {
-      if (Script.IsOnMission()) return true;
+      return !!Script.IsOnMission();
     }
   } catch(e) {}
   return false;
@@ -353,38 +249,16 @@ function isOnMission() {
 
 function getVehiclePointer(c) {
   if (!c) return 0;
+  try { if (typeof c.getPointer === 'function') { const p = c.getPointer(); if (p > 0x10000) return p; } } catch(e) {}
   try {
-    if (typeof c.getPointer === 'function') {
-      const p = c.getPointer();
-      if (p && p > 0x10000) return p;
-    }
-  } catch(e) {}
-  try {
-    const obj = toCar(c);
-    let h = 0;
-    if (obj) {
-      if (typeof obj.handle === 'number') h = obj.handle;
-      else if (typeof obj === 'number') h = obj;
-    }
+    let h = (typeof c === 'number') ? c : (c && typeof c.handle === 'number' ? c.handle : 0);
+    if (!h) { const obj = toCar(c); if (obj) h = obj.handle || 0; }
     if (h > 0) {
       const idx = h >> 8;
-      let pPool = 0;
-      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-        pPool = Memory.Read(0xC17044, 4, false);
-        if (pPool && pPool > 0x10000) {
-          const pObjects = Memory.Read(pPool, 4, false);
-          if (pObjects && pObjects > 0x10000) {
-            return pObjects + idx * 0xA18;
-          }
-        }
-      } else if (typeof READ_MEMORY === 'function') {
-        pPool = READ_MEMORY(0xC17044, 4, false);
-        if (pPool && pPool > 0x10000) {
-          const pObjects = READ_MEMORY(pPool, 4, false);
-          if (pObjects && pObjects > 0x10000) {
-            return pObjects + idx * 0xA18;
-          }
-        }
+      const pPool = readMem(0xC17044, 4);
+      if (pPool > 0x10000) {
+        const pObjects = readMem(pPool, 4);
+        if (pObjects > 0x10000) return pObjects + idx * 0xA18;
       }
     }
   } catch(e) {}
@@ -396,15 +270,7 @@ function isMissionVehicle(c) {
   if (isOnMission()) return true;
   try {
     const pVeh = getVehiclePointer(c);
-    if (pVeh && pVeh > 0x10000) {
-      let createdBy = 0;
-      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-        createdBy = Memory.Read(pVeh + 0x42B, 1, false);
-      } else if (typeof READ_MEMORY === 'function') {
-        createdBy = READ_MEMORY(pVeh + 0x42B, 1, false);
-      }
-      if (createdBy === 2) return true; // 2 = MISSION_VEHICLE
-    }
+    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true;
   } catch(e) {}
   return false;
 }
