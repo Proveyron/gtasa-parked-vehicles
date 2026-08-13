@@ -267,10 +267,9 @@ function getVehiclePointer(c) {
 
 function isMissionVehicle(c) {
   if (!c) return false;
-  if (isOnMission()) return true;
   try {
     const pVeh = getVehiclePointer(c);
-    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true;
+    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true; // 2 = MISSION_VEHICLE in GTA SA
   } catch(e) {}
   return false;
 }
