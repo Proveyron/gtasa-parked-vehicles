@@ -1241,6 +1241,10 @@ function tryClaimCar(car, char) {
 }
 function runPending(char) {
   if (!pending.length) return;
+  if (CFG.pauseDuringMissions && isPlayerOnMission()) {
+    pending = [];
+    return;
+  }
   const now = Date.now();
   const player = new Player(0);
   if (player.isDead()) {
@@ -1722,21 +1726,6 @@ while (true) {
     }
     continue;
   }
-  if (CFG.pauseDuringMissions && isPlayerOnMission()) {
-    if (!wasOnMissionState) {
-      wasOnMissionState = true;
-      wasInCar = false;
-      lastCarHandle = null;
-      pending = [];
-      log("LOGGER: Player is on a mission — script operations suspended.");
-      if (CFG.tooltips) showTextBox("~y~Mission Active!~n~~w~Parked vehicle streamer suspended.");
-    }
-    continue;
-  } else if (wasOnMissionState) {
-    wasOnMissionState = false;
-    log("LOGGER: Mission completed/ended — script operations resumed.");
-    if (CFG.tooltips) showTextBox("~g~Mission Ended!~n~~w~Parked vehicle streamer active.");
-  }
   const inCar = char.isInAnyCar();
   checkCheatCodes(player, char);
   if (inCar) {
@@ -1768,13 +1757,20 @@ while (true) {
     log("LOGGER: Exited vehicle, checking handle...");
     if (lastCarHandle && isCarValid(lastCarHandle)) {
       try {
-        const hp = getCarHealth(lastCarHandle);
-        if (hp > 250 && isCarUsable(lastCarHandle)) {
-          log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
-          pending.push({ car: lastCarHandle, t: Date.now() });
+        if (CFG.pauseDuringMissions && isPlayerOnMission()) {
+          const vMid = getCarModelId(lastCarHandle);
+          const vName = getVehicleName(vMid);
+          log("LOGGER: Exited vehicle while on a mission — exit position not saved (" + vName + ")");
+          if (CFG.tooltips) showTextBox("~y~Mission Active!~n~~w~Exit position not saved for ~y~" + vName);
         } else {
-          log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
-          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
+          const hp = getCarHealth(lastCarHandle);
+          if (hp > 250 && isCarUsable(lastCarHandle)) {
+            log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
+            pending.push({ car: lastCarHandle, t: Date.now() });
+          } else {
+            log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
+            if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
+          }
         }
       } catch(e) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
