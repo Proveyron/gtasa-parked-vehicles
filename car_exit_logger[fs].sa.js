@@ -462,7 +462,7 @@ function applyStoredDamage(c, panels, doors) {
 function getCarPoppedTires(c) {
   if (!c) return [];
   const mid = getCarModelId(c);
-  if (getVehicleTypeFromMemory(mid) === 8) return []; // Bicycles (BMX) have no burstable tires
+  if (isBmxModel(mid)) return []; // Bicycles (BMX) have no burstable tires
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return [];
   const maxTires = isBikeModel(mid) ? 2 : 4;
   const popped = [];
@@ -479,7 +479,7 @@ function getCarPoppedTires(c) {
 function setCarPoppedTires(c, tiresArray) {
   if (!c || !tiresArray || !tiresArray.length) return;
   const mid = getCarModelId(c);
-  if (getVehicleTypeFromMemory(mid) === 8) return; // Bicycles (BMX) have no burstable tires
+  if (isBmxModel(mid)) return; // Bicycles (BMX) have no burstable tires
   if (!isAutomobileModel(mid) && !isBikeModel(mid)) return;
   const maxTires = isBikeModel(mid) ? 2 : 4;
   for (const t of tiresArray) {
@@ -775,7 +775,7 @@ function spawnVehicleFromSpawner(modelId, char) {
     dist = 9.0;
     zOffset = 0.5;
     clearRadius = 7.0;
-  } else if (getVehicleTypeFromMemory(modelId) === 1 || modelId === 403 || modelId === 514 || modelId === 515 || modelId === 443) {
+  } else if (modelId === 403 || modelId === 514 || modelId === 515 || modelId === 443 || modelId === 406 || modelId === 408 || modelId === 455 || modelId === 524) {
     dist = 7.5;
     zOffset = 0.5;
     clearRadius = 6.0;
