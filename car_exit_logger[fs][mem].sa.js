@@ -1,15 +1,17 @@
 const CONFIG_PATH = "CLEO\\car_exit_logger.ini";
 const PARKED_PATH = "CLEO\\vehicles.parked";
 const CFG = {
-  streamIn:    150.0,
-  streamOut:   170.0,
-  maxEntries:  100,
-  unlockDoors: true,
-  tooltips:    true,
-  saveHealth:  true,
-  saveTires:   true,
-  menuKey:     117,
-  spawnerKey:  116,
+  streamIn:                    150.0,
+  streamOut:                   170.0,
+  maxEntries:                  100,
+  unlockDoors:                 true,
+  tooltips:                    true,
+  saveHealth:                  true,
+  saveTires:                   true,
+  preventMissionVehicles:      true,
+  autoSaveMenuOnMissionPassed: true,
+  menuKey:                     117,
+  spawnerKey:                  116,
 };
 const VK_F5    = 116;
 const VK_F6    = 117;
@@ -276,16 +278,137 @@ function getVehicleGxtKey(modelId) {
   } catch(e) {}
   return "DUMMY";
 }
-let wasInCar       = false;
-let fireNotified   = false;
-let lastCarHandle  = null;
-let pending        = [];
-let lastPendingMs  = 0;
-let lastStreamerMs = 0;
-let lastFireCheckMs = 0;
-let streamed       = {};
-let spawnTimeMap   = {};
-let cache          = [];
+let wasInCar         = false;
+let fireNotified     = false;
+let lastCarHandle    = null;
+let lastCarIsMission = false;
+let pending          = [];
+let lastPendingMs    = 0;
+let lastStreamerMs   = 0;
+let lastFireCheckMs  = 0;
+let streamed         = {};
+let spawnTimeMap     = {};
+let cache            = [];
+
+let wasOnMission         = false;
+let missionPassedOnStart = 0;
+let pendingSaveMenuMs    = 0;
+
+function openSaveMenu() {
+  log("LOGGER: Triggering Game Save Menu after successful mission completion...");
+  let opened = false;
+  try {
+    if (typeof SHOW_SAVE_SCREEN === 'function') {
+      SHOW_SAVE_SCREEN();
+      opened = true;
+    }
+  } catch(e) {}
+  if (!opened) {
+    try {
+      if (typeof showSaveScreen === 'function') {
+        showSaveScreen();
+        opened = true;
+      }
+    } catch(e) {}
+  }
+  if (!opened) {
+    try {
+      if (typeof ACTIVATE_SAVE_MENU === 'function') {
+        ACTIVATE_SAVE_MENU();
+        opened = true;
+      }
+    } catch(e) {}
+  }
+  if (!opened) {
+    try {
+      if (typeof activateSaveMenu === 'function') {
+        activateSaveMenu();
+        opened = true;
+      }
+    } catch(e) {}
+  }
+  if (opened && CFG.tooltips) {
+    showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
+  }
+  return opened;
+}
+
+function isOnMission() {
+  try {
+    let onM = 0;
+    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+      onM = Memory.Read(0xA444A0, 1, false);
+    } else if (typeof READ_MEMORY === 'function') {
+      onM = READ_MEMORY(0xA444A0, 1, false);
+    }
+    if (onM && onM !== 0) return true;
+  } catch(e) {}
+  try {
+    if (typeof Script !== 'undefined' && typeof Script.IsOnMission === 'function') {
+      if (Script.IsOnMission()) return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function getVehiclePointer(c) {
+  if (!c) return 0;
+  try {
+    if (typeof c.getPointer === 'function') {
+      const p = c.getPointer();
+      if (p && p > 0x10000) return p;
+    }
+  } catch(e) {}
+  try {
+    const obj = toCar(c);
+    let h = 0;
+    if (obj) {
+      if (typeof obj.handle === 'number') h = obj.handle;
+      else if (typeof obj === 'number') h = obj;
+    }
+    if (h > 0) {
+      const idx = h >> 8;
+      let pPool = 0;
+      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+        pPool = Memory.Read(0xC17044, 4, false);
+        if (pPool && pPool > 0x10000) {
+          const pObjects = Memory.Read(pPool, 4, false);
+          if (pObjects && pObjects > 0x10000) {
+            return pObjects + idx * 0xA18;
+          }
+        }
+      } else if (typeof READ_MEMORY === 'function') {
+        pPool = READ_MEMORY(0xC17044, 4, false);
+        if (pPool && pPool > 0x10000) {
+          const pObjects = READ_MEMORY(pPool, 4, false);
+          if (pObjects && pObjects > 0x10000) {
+            return pObjects + idx * 0xA18;
+          }
+        }
+      }
+    }
+  } catch(e) {}
+  return 0;
+}
+
+function isMissionVehicle(c) {
+  if (!c) return false;
+  if (isOnMission()) return true;
+  try {
+    const pVeh = getVehiclePointer(c);
+    if (pVeh && pVeh > 0x10000) {
+      let createdBy = 0;
+      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+        createdBy = Memory.Read(pVeh + 0x42B, 1, false);
+      } else if (typeof READ_MEMORY === 'function') {
+        createdBy = READ_MEMORY(pVeh + 0x42B, 1, false);
+      }
+      if (createdBy === 2) return true; // 2 = MISSION_VEHICLE
+    }
+  } catch(e) {}
+  return false;
+}
+
 function toCar(c) {
   if (!c) return null;
   if (typeof c === 'object' && c !== null) return c;
@@ -1291,6 +1414,14 @@ function runPending(char) {
         pending.splice(i, 1);
         continue;
       }
+      if (CFG.preventMissionVehicles && isMissionVehicle(c)) {
+        const vMid = getCarModelId(c);
+        const vName = getVehicleName(vMid);
+        log("LOGGER: Discarded vehicle handle from pending exit queue — mission vehicle / player on mission (" + vName + ")");
+        if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
+        pending.splice(i, 1);
+        continue;
+      }
       const mid = getCarModelId(c);
       if (mid <= 0) { pending.splice(i, 1); continue; }
       if (playerCar && (c === playerCar || (typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)))) { pending.splice(i, 1); continue; }
@@ -1343,6 +1474,13 @@ function saveCarExit(car) {
     const player = new Player(0);
     if (player.isDead()) {
       log("LOGGER: Skipped saving exit — player is dead.");
+      return;
+    }
+    if (CFG.preventMissionVehicles && isMissionVehicle(car)) {
+      const vMid = getCarModelId(car);
+      const vName = getVehicleName(vMid);
+      log("LOGGER: Skipped saving exit — mission vehicle or player on mission (" + vName + ").");
+      if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
       return;
     }
     const hp = getCarHealth(car);
@@ -1576,6 +1714,10 @@ function loadConfig() {
     if (h !== null && h !== undefined) CFG.saveHealth = (h === 1);
     const pt = IniFile.ReadInt(CONFIG_PATH, "Settings", "SavePoppedTires");
     if (pt !== null && pt !== undefined) CFG.saveTires = (pt === 1);
+    const pmv = IniFile.ReadInt(CONFIG_PATH, "Settings", "PreventMissionVehicles");
+    if (pmv !== null && pmv !== undefined) CFG.preventMissionVehicles = (pmv === 1);
+    const asm = IniFile.ReadInt(CONFIG_PATH, "Settings", "AutoSaveMenuOnMissionPassed");
+    if (asm !== null && asm !== undefined) CFG.autoSaveMenuOnMissionPassed = (asm === 1);
     const mk = IniFile.ReadInt(CONFIG_PATH, "Settings", "MenuKeyCode");
     if (mk && mk > 0) CFG.menuKey = mk; else CFG.menuKey = VK_F6;
     const sk = IniFile.ReadInt(CONFIG_PATH, "Settings", "SpawnerKeyCode");
@@ -1751,9 +1893,16 @@ while (true) {
         const mid = getCarModelId(car);
         if (car && isCarValid(car) && mid > 0) {
           lastCarHandle = car;
-          log("LOGGER: Entered vehicle model " + mid);
+          lastCarIsMission = (CFG.preventMissionVehicles && isMissionVehicle(car));
+          const vName = getVehicleName(mid);
+          if (lastCarIsMission) {
+            log("LOGGER: Entered vehicle model " + mid + " (" + vName + ") [MISSION VEHICLE - BYPASSED]");
+            if (CFG.tooltips) showTextBox("~y~Mission vehicle detected!~n~~w~Storage bypassed for ~y~" + vName);
+          } else {
+            log("LOGGER: Entered vehicle model " + mid + " (" + vName + ")");
+            tryClaimCar(car, char);
+          }
           probeAndCacheTunability(car, mid);
-          tryClaimCar(car, char);
         }
       } catch(e) {
         log("LOGGER: Error on enter car: " + (e.stack || e));
@@ -1771,7 +1920,13 @@ while (true) {
     if (lastCarHandle) {
       try {
         const hp = getCarHealth(lastCarHandle);
-        if (hp > 250 && isCarUsable(lastCarHandle)) {
+        const isMission = lastCarIsMission || (CFG.preventMissionVehicles && isMissionVehicle(lastCarHandle));
+        if (isMission) {
+          const vMid = getCarModelId(lastCarHandle);
+          const vName = getVehicleName(vMid);
+          log("LOGGER: Exited mission vehicle / during mission — ignored & discarded (" + vName + ")");
+          if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
+        } else if (hp > 250 && isCarUsable(lastCarHandle)) {
           log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
           pending.push({ car: lastCarHandle, t: Date.now() });
         } else {
@@ -1782,8 +1937,56 @@ while (true) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
       }
       lastCarHandle = null;
+      lastCarIsMission = false;
     }
   }
   runPending(char);
   runStreamer(char);
+
+  // Track Mission Completion & Save Menu Trigger
+  const currentlyOnMission = isOnMission();
+  if (currentlyOnMission) {
+    if (!wasOnMission) {
+      wasOnMission = true;
+      try {
+        if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+          missionPassedOnStart = Memory.Read(0xBA67A4, 4, false) || 0;
+        } else if (typeof READ_MEMORY === 'function') {
+          missionPassedOnStart = READ_MEMORY(0xBA67A4, 4, false) || 0;
+        }
+      } catch(e) {
+        missionPassedOnStart = 0;
+      }
+      log("LOGGER: Mission started (Missions passed count: " + missionPassedOnStart + ")");
+    }
+  } else if (wasOnMission) {
+    wasOnMission = false;
+    let currentPassed = 0;
+    try {
+      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
+        currentPassed = Memory.Read(0xBA67A4, 4, false) || 0;
+      } else if (typeof READ_MEMORY === 'function') {
+        currentPassed = READ_MEMORY(0xBA67A4, 4, false) || 0;
+      }
+    } catch(e) {}
+
+    const playerDead = player.isDead();
+    const missionPassed = (currentPassed > missionPassedOnStart) || (!playerDead);
+
+    if (missionPassed && !playerDead) {
+      log("LOGGER: Mission completed successfully! Auto-Save Menu scheduled in 2.0s.");
+      if (CFG.tooltips) showTextBox("~g~Mission Passed!~n~~w~Opening Save Menu...");
+      pendingSaveMenuMs = Date.now() + 2000;
+    } else {
+      log("LOGGER: Mission ended without completion (failed or player died).");
+    }
+  }
+
+  // Trigger Save Menu when timer expires
+  if (pendingSaveMenuMs > 0 && Date.now() >= pendingSaveMenuMs) {
+    pendingSaveMenuMs = 0;
+    if (!player.isDead() && CFG.autoSaveMenuOnMissionPassed) {
+      openSaveMenu();
+    }
+  }
 }

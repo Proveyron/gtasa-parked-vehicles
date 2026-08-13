@@ -1,6 +1,6 @@
 # GTA SA Parked Vehicles Persistent Streamer
 
-A CLEO Redux script (`car_exit_logger[fs].sa.js`) for Grand Theft Auto: San Andreas. The system automatically records, saves, and streams back every vehicle exited by the player, retaining location, orientation, colors, visual damage, popped tires, tuning upgrades, paintjobs, and health across game sessions and reloads.
+A CLEO Redux script (`car_exit_logger[fs][mem].sa.js`) for Grand Theft Auto: San Andreas. The system automatically records, saves, and streams back every vehicle exited by the player, retaining location, orientation, colors, visual damage, popped tires, tuning upgrades, paintjobs, and health across game sessions and reloads.
 
 ---
 
@@ -79,7 +79,7 @@ flowchart TD
 
 ## Comprehensive Function Reference
 
-Below is a detailed technical reference for all functions in `car_exit_logger[fs].sa.js`:
+Below is a detailed technical reference for all functions in `car_exit_logger[fs][mem].sa.js`:
 
 ### Log & Interface Utilities
 
