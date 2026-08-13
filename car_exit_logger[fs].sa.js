@@ -4,6 +4,7 @@ const CFG = {
   streamIn:            150.0,
   streamOut:           170.0,
   maxEntries:          100,
+  maxStreamed:         10,
   unlockDoors:         true,
   tooltips:            true,
   saveHealth:          true,
@@ -1008,6 +1009,16 @@ function runStreamer(char) {
           // If this entry was just repositioned this iteration its new key is
           // already registered in streamed — skip to avoid a duplicate spawn.
           if (streamed.hasOwnProperty(key)) continue;
+
+          // Prevent vehicle pool exhaustion: limit active streamed parked cars to MaxStreamed (default 10)
+          let activeCount = 0;
+          for (const k in streamed) {
+            if (streamed[k] && isCarValid(streamed[k])) activeCount++;
+          }
+          if (activeCount >= (CFG.maxStreamed || 10)) {
+            continue;
+          }
+
           clearNearbyNonTracked(d.x, d.y, d.z, 2.0, playerCar, char);
           const nc = spawnCarAt(d.modelId, d.x, d.y, d.z);
           if (nc) {
@@ -1062,6 +1073,10 @@ function runStreamer(char) {
           } catch(e) {}
           if (!isPlayerActiveCar && isCarValid(h)) {
             updateParkedCarStateIfNeeded(h, d, i, entries);
+            try {
+              if (typeof h.markAsNoLongerNeeded === 'function') h.markAsNoLongerNeeded();
+              else if (typeof Car !== 'undefined' && typeof Car.MarkAsNoLongerNeeded === 'function') Car.MarkAsNoLongerNeeded(h);
+            } catch(e) {}
             deleteCarHandle(h);
             log("LOGGER: Streamed OUT vehicle " + (d.name || getVehicleName(d.modelId)));
           }
@@ -1548,6 +1563,8 @@ function loadConfig() {
     if (o && o > 0) CFG.streamOut = o;
     const m = IniFile.ReadInt(CONFIG_PATH, "Settings", "MaxEntries");
     if (m && m > 0) CFG.maxEntries = m;
+    const ms = IniFile.ReadInt(CONFIG_PATH, "Settings", "MaxStreamed");
+    if (ms && ms > 0) CFG.maxStreamed = Math.min(Math.max(ms, 1), 25);
     const u = IniFile.ReadInt(CONFIG_PATH, "Settings", "AutoUnlockDoors");
     if (u !== null && u !== undefined) CFG.unlockDoors = (u === 1);
     const t = IniFile.ReadInt(CONFIG_PATH, "Settings", "EnableTooltips");
