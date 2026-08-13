@@ -1,8 +1,8 @@
 const CONFIG_PATH = "CLEO\\car_exit_logger.ini";
 const PARKED_PATH = "CLEO\\vehicles.parked";
 const CFG = {
-  streamIn:            150.0,
-  streamOut:           170.0,
+  streamIn:            50.0,
+  streamOut:           70.0,
   maxEntries:          100,
   maxStreamed:         10,
   unlockDoors:         true,
