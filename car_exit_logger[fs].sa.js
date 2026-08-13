@@ -1,17 +1,18 @@
 const CONFIG_PATH = "CLEO\\car_exit_logger.ini";
 const PARKED_PATH = "CLEO\\vehicles.parked";
 const CFG = {
-  streamIn:         150.0,
-  streamOut:        170.0,
-  maxEntries:       100,
-  unlockDoors:      true,
-  tooltips:         true,
-  saveHealth:       true,
-  saveTires:        true,
-  tagLicensePlates: true,
-  customPlateText:  "PARKED",
-  menuKey:          117,
-  spawnerKey:       116,
+  streamIn:            150.0,
+  streamOut:           170.0,
+  maxEntries:          100,
+  unlockDoors:         true,
+  tooltips:            true,
+  saveHealth:          true,
+  saveTires:           true,
+  tagLicensePlates:    true,
+  customPlateText:     "PARKED",
+  pauseDuringMissions: true,
+  menuKey:             117,
+  spawnerKey:          116,
 };
 const VK_F5    = 116;
 const VK_F6    = 117;
@@ -217,12 +218,22 @@ function getAllSafeVehiclesList() {
   return cachedAllSafeModels;
 }
 
-let wasInCar      = false;
-let fireNotified  = false;
-let lastCarHandle = null;
-let pending       = [];
-let streamed      = {};
-let spawnTimeMap  = {};
+function isPlayerOnMission() {
+  try {
+    if (typeof Script !== 'undefined' && typeof Script.IsOnMission === 'function') {
+      return !!Script.IsOnMission();
+    }
+  } catch(e) {}
+  return false;
+}
+
+let wasInCar          = false;
+let fireNotified      = false;
+let lastCarHandle     = null;
+let wasOnMissionState = false;
+let pending           = [];
+let streamed          = {};
+let spawnTimeMap      = {};
 let cache         = [];
 
 function toCar(c) {
@@ -1545,6 +1556,8 @@ function loadConfig() {
     if (tlp !== null && tlp !== undefined) CFG.tagLicensePlates = (tlp === 1);
     const cpt = IniFile.ReadString(CONFIG_PATH, "Settings", "CustomPlateText");
     if (cpt && cpt !== "NotFound" && cpt.trim().length > 0) CFG.customPlateText = cpt.trim().substring(0, 8).toUpperCase();
+    const pdm = IniFile.ReadInt(CONFIG_PATH, "Settings", "PauseDuringMissions");
+    if (pdm !== null && pdm !== undefined) CFG.pauseDuringMissions = (pdm === 1);
     const mk = IniFile.ReadInt(CONFIG_PATH, "Settings", "MenuKeyCode");
     if (mk && mk > 0) CFG.menuKey = mk; else CFG.menuKey = VK_F6;
     const sk = IniFile.ReadInt(CONFIG_PATH, "Settings", "SpawnerKeyCode");
@@ -1708,6 +1721,21 @@ while (true) {
       f6WasDown = false;
     }
     continue;
+  }
+  if (CFG.pauseDuringMissions && isPlayerOnMission()) {
+    if (!wasOnMissionState) {
+      wasOnMissionState = true;
+      wasInCar = false;
+      lastCarHandle = null;
+      pending = [];
+      log("LOGGER: Player is on a mission — script operations suspended.");
+      if (CFG.tooltips) showTextBox("~y~Mission Active!~n~~w~Parked vehicle streamer suspended.");
+    }
+    continue;
+  } else if (wasOnMissionState) {
+    wasOnMissionState = false;
+    log("LOGGER: Mission completed/ended — script operations resumed.");
+    if (CFG.tooltips) showTextBox("~g~Mission Ended!~n~~w~Parked vehicle streamer active.");
   }
   const inCar = char.isInAnyCar();
   checkCheatCodes(player, char);

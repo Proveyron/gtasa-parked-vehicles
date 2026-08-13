@@ -32,6 +32,7 @@ The script reads its configuration settings from `cleo\car_exit_logger.ini`. Bel
 | `SaveTires` | `1` | Saves popped tire states (`1` = enabled, `0` = standard intact tires). |
 | `TagLicensePlates` | `1` | Automatically tags stored vehicles with custom license plates (`1` = enabled, `0` = disabled). |
 | `CustomPlateText` | `PARKED` | License plate text applied to stored vehicles (max 8 characters, e.g. `PARKED`). |
+| `PauseDuringMissions` | `1` | Lifts (suspends) script operations while on a mission (`1` = enabled, `0` = disabled). |
 | `Tooltips` | `1` | Displays top-right HUD notification text boxes for actions (`1` = enabled, `0` = disabled). |
 
 ---
