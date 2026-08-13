@@ -280,11 +280,33 @@ function getVehiclePointer(c) {
   return 0;
 }
 
+function hasBlip(c) {
+  if (!c) return false;
+  try {
+    let h = (typeof c === 'number') ? c : (c && typeof c.handle === 'number' ? c.handle : 0);
+    if (!h) { const obj = toCar(c); if (obj) h = obj.handle || 0; }
+    if (!h) return false;
+    const targetIdx = h >> 8;
+    for (let i = 0; i < 175; i++) {
+      const base = 0xBAA4A0 + i * 40;
+      const blipType = readMem(base + 0x25, 1);
+      if (blipType === 1) {
+        const entHandle = readMem(base + 0x04, 4);
+        if (entHandle === h || (entHandle > 0 && (entHandle >> 8) === targetIdx)) {
+          return true;
+        }
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
 function isMissionVehicle(c) {
   if (!c) return false;
   try {
+    if (hasBlip(c)) return true;
     const pVeh = getVehiclePointer(c);
-    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true; // 2 = MISSION_VEHICLE in GTA SA
+    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true;
   } catch(e) {}
   return false;
 }
