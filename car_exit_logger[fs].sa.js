@@ -1,17 +1,17 @@
 const CONFIG_PATH = "CLEO\\car_exit_logger.ini";
 const PARKED_PATH = "CLEO\\vehicles.parked";
 const CFG = {
-  streamIn:                    150.0,
-  streamOut:                   170.0,
-  maxEntries:                  100,
-  unlockDoors:                 true,
-  tooltips:                    true,
-  saveHealth:                  true,
-  saveTires:                   true,
-  preventMissionVehicles:      true,
-  autoSaveMenuOnMissionPassed: true,
-  menuKey:                     117,
-  spawnerKey:                  116,
+  streamIn:         150.0,
+  streamOut:        170.0,
+  maxEntries:       100,
+  unlockDoors:      true,
+  tooltips:         true,
+  saveHealth:       true,
+  saveTires:        true,
+  tagLicensePlates: true,
+  customPlateText:  "PARKED",
+  menuKey:          117,
+  spawnerKey:       116,
 };
 const VK_F5    = 116;
 const VK_F6    = 117;
@@ -81,36 +81,49 @@ function isAircraftModel(mid) {
   return false;
 }
 
-function readMem(addr, size = 4) {
-  try {
-    if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') return Memory.Read(addr, size, false);
-    if (typeof READ_MEMORY === 'function') return READ_MEMORY(addr, size, false);
-  } catch(e) {}
-  return 0;
-}
-
-// Dynamically reads CModelInfo in GTA SA memory to get vehicle type
-// 0=Automobile, 1=MTRUCK, 2=QUAD, 3=HELI, 4=PLANE, 5=BOAT, 6=TRAIN, 7=BIKE, 8=BMX, 9=TRACTOR
-function getVehicleTypeFromMemory(mid) {
-  if (!mid || mid < 400 || mid > 611) return -1;
-  const pModelInfo = readMem(0xA9B0C8 + mid * 4, 4);
-  if (pModelInfo > 0x10000) return readMem(pModelInfo + 0x34, 1);
-  return -1;
+function isBmxModel(mid) {
+  return mid === 481 || mid === 509 || mid === 510;
 }
 
 function isBikeModel(mid) {
   if (!mid) return false;
-  const vType = getVehicleTypeFromMemory(mid);
-  if (vType === 7 || vType === 8 || vType === 2) return true; // BIKE, BMX, QUAD
-  return false;
+  if (isBmxModel(mid)) return true;
+  try {
+    if (typeof Car !== 'undefined' && typeof Car.IsThisModelABike === 'function') {
+      return !!Car.IsThisModelABike(mid);
+    }
+  } catch(e) {}
+  const bikes = [448, 461, 462, 463, 468, 471, 521, 522, 581, 586];
+  return bikes.indexOf(mid) !== -1;
 }
 
 function isAutomobileModel(mid) {
-  if (!mid) return false;
-  const vType = getVehicleTypeFromMemory(mid);
-  if (vType === 0 || vType === 1 || vType === 9) return true; // AUTOMOBILE, MTRUCK, TRACTOR
-  if (vType >= 2 && vType <= 8) return false;
-  return !isBoatModel(mid) && !isAircraftModel(mid) && !isBikeModel(mid);
+  if (!mid || mid < 400 || mid > 611) return false;
+  if (isBoatModel(mid) || isAircraftModel(mid) || isBikeModel(mid)) return false;
+  return true;
+}
+
+function setCarNumberPlate(c, plateText) {
+  if (!c || !plateText) return;
+  const txt = ("" + plateText).trim().substring(0, 8).toUpperCase();
+  try {
+    if (typeof c.setNumberPlate === 'function') {
+      c.setNumberPlate(txt);
+    } else if (typeof Car !== 'undefined' && typeof Car.SetNumberPlate === 'function') {
+      Car.SetNumberPlate(c, txt);
+    }
+  } catch(e) {}
+}
+
+function getCarNumberPlate(c) {
+  if (!c) return "";
+  try {
+    let txt = "";
+    if (typeof c.getNumberPlate === 'function') txt = c.getNumberPlate();
+    else if (typeof Car !== 'undefined' && typeof Car.GetNumberPlate === 'function') txt = Car.GetNumberPlate(c);
+    if (txt && typeof txt === 'string' && txt.trim().length > 0) return txt.trim().substring(0, 8).toUpperCase();
+  } catch(e) {}
+  return "";
 }
 function isTunableVehicle(mid) {
   if (!mid) return false;
@@ -204,112 +217,13 @@ function getAllSafeVehiclesList() {
   return cachedAllSafeModels;
 }
 
-let wasInCar         = false;
-let fireNotified     = false;
-let lastCarHandle    = null;
-let lastCarIsMission = false;
-let pending          = [];
-let streamed         = {};
-let spawnTimeMap     = {};
-let cache            = [];
-
-let wasOnMission         = false;
-let missionPassedOnStart = 0;
-let pendingSaveMenuMs    = 0;
-
-function openSaveMenu() {
-  log("LOGGER: Triggering Game Save Menu after successful mission completion...");
-  let opened = false;
-  try {
-    if (typeof Memory !== 'undefined' && typeof Memory.Write === 'function') {
-      Memory.Write(0xBA677B, 1, 1, false);
-      opened = true;
-    } else if (typeof WRITE_MEMORY === 'function') {
-      WRITE_MEMORY(0xBA677B, 1, 1, false);
-      opened = true;
-    }
-  } catch(e) {}
-  if (!opened) {
-    const fns = [
-      typeof SHOW_SAVE_SCREEN === 'function' ? SHOW_SAVE_SCREEN : null,
-      typeof showSaveScreen === 'function' ? showSaveScreen : null,
-      typeof ACTIVATE_SAVE_MENU === 'function' ? ACTIVATE_SAVE_MENU : null,
-      typeof activateSaveMenu === 'function' ? activateSaveMenu : null
-    ];
-    for (const fn of fns) {
-      if (fn) {
-        try {
-          fn();
-          opened = true;
-          break;
-        } catch(e) {}
-      }
-    }
-  }
-  if (opened && CFG.tooltips) {
-    showTextBox("~g~Save Game~n~~w~Select a slot to save your progress.");
-  }
-  return opened;
-}
-
-function isOnMission() {
-  if (readMem(0xA444A0, 1) !== 0) return true;
-  try {
-    if (typeof Script !== 'undefined' && typeof Script.IsOnMission === 'function') {
-      return !!Script.IsOnMission();
-    }
-  } catch(e) {}
-  return false;
-}
-
-function getVehiclePointer(c) {
-  if (!c) return 0;
-  try { if (typeof c.getPointer === 'function') { const p = c.getPointer(); if (p > 0x10000) return p; } } catch(e) {}
-  try {
-    let h = (typeof c === 'number') ? c : (c && typeof c.handle === 'number' ? c.handle : 0);
-    if (!h) { const obj = toCar(c); if (obj) h = obj.handle || 0; }
-    if (h > 0) {
-      const idx = h >> 8;
-      const pPool = readMem(0xC17044, 4);
-      if (pPool > 0x10000) {
-        const pObjects = readMem(pPool, 4);
-        if (pObjects > 0x10000) return pObjects + idx * 0xA18;
-      }
-    }
-  } catch(e) {}
-  return 0;
-}
-
-function hasBlip(c) {
-  if (!c) return false;
-  try {
-    let h = (typeof c === 'number') ? c : (c && typeof c.handle === 'number' ? c.handle : 0);
-    if (!h) { const obj = toCar(c); if (obj) h = obj.handle || 0; }
-    if (!h) return false;
-    const targetIdx = h >> 8;
-    for (let i = 0; i < 175; i++) {
-      const base = 0xBAA4A0 + i * 40;
-      const blipType = readMem(base + 0x25, 1);
-      if (blipType === 1) {
-        const entHandle = readMem(base + 0x04, 4);
-        if (entHandle === h || (entHandle > 0 && (entHandle >> 8) === targetIdx)) {
-          return true;
-        }
-      }
-    }
-  } catch(e) {}
-  return false;
-}
-
-function isMissionVehicle(c) {
-  if (!c) return false;
-  try {
-    if (hasBlip(c)) return true;
-    const pVeh = getVehiclePointer(c);
-    if (pVeh > 0x10000 && readMem(pVeh + 0x42B, 1) === 2) return true;
-  } catch(e) {}
-  return false;
-}
+let wasInCar      = false;
+let fireNotified  = false;
+let lastCarHandle = null;
+let pending       = [];
+let streamed      = {};
+let spawnTimeMap  = {};
+let cache         = [];
 
 function toCar(c) {
   if (!c) return null;
@@ -1116,9 +1030,12 @@ function runStreamer(char) {
             }
             // Restore hydraulics and nitro state after mods are applied
             applyCarExtras(nc, d.extras);
+            if (CFG.tagLicensePlates && d.plateText) {
+              setCarNumberPlate(nc, d.plateText);
+            }
             streamed[key] = nc;
             spawnTimeMap[key] = Date.now();
-            log("LOGGER: Streamed IN vehicle " + (d.name || getVehicleName(d.modelId)) + " at " + d.x.toFixed(1) + "," + d.y.toFixed(1));
+            log("LOGGER: Streamed IN vehicle " + (d.name || getVehicleName(d.modelId)) + " at " + d.x.toFixed(1) + "," + d.y.toFixed(1) + " (Plate: " + (d.plateText || "PARKED") + ")");
           }
         }
       } else if (sq > outSq) {
@@ -1314,14 +1231,6 @@ function runPending(char) {
         pending.splice(i, 1);
         continue;
       }
-      if (CFG.preventMissionVehicles && isMissionVehicle(c)) {
-        const vMid = getCarModelId(c);
-        const vName = getVehicleName(vMid);
-        log("LOGGER: Discarded vehicle handle from pending exit queue — mission vehicle / player on mission (" + vName + ")");
-        if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
-        pending.splice(i, 1);
-        continue;
-      }
       const mid = getCarModelId(c);
       if (mid <= 0) { pending.splice(i, 1); continue; }
       if (playerCar && (c === playerCar || (typeof char.isSittingInCar === 'function' && char.isSittingInCar(c)))) { pending.splice(i, 1); continue; }
@@ -1347,8 +1256,6 @@ function formatMinifiedEntry(d) {
   const dmStr = (d.panels && d.panels.length) ? d.panels.join(",") : "";
   const ddStr = (d.doors && d.doors.length) ? d.doors.join(",") : "";
   const uStr  = (d.upgrades && d.upgrades.length) ? d.upgrades.join(",") : "";
-  // Extras field (parts[10]): flags separated by '+'
-  // 'h' = hydraulics, 'n1'/'n3'/'n5' = nitro type
   const exFlags = [];
   if (d.extras) {
     if (d.extras.hydraulics) exFlags.push("h");
@@ -1357,6 +1264,7 @@ function formatMinifiedEntry(d) {
     else if (d.extras.nitroModId === 1010) exFlags.push("n5");
   }
   const exStr = exFlags.join("+");
+  const plateStr = d.plateText || (CFG.tagLicensePlates ? (CFG.customPlateText || "PARKED") : "");
   return d.modelId + "|" +
          d.x.toFixed(2) + "," + d.y.toFixed(2) + "," + d.z.toFixed(2) + "|" +
          d.heading.toFixed(1) + "|" +
@@ -1367,20 +1275,14 @@ function formatMinifiedEntry(d) {
          dmStr + "|" +
          ddStr + "|" +
          uStr + "|" +
-         exStr;
+         exStr + "|" +
+         plateStr;
 }
 function saveCarExit(car) {
   try {
     const player = new Player(0);
     if (player.isDead()) {
       log("LOGGER: Skipped saving exit — player is dead.");
-      return;
-    }
-    if (CFG.preventMissionVehicles && isMissionVehicle(car)) {
-      const vMid = getCarModelId(car);
-      const vName = getVehicleName(vMid);
-      log("LOGGER: Skipped saving exit — mission vehicle or player on mission (" + vName + ").");
-      if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
       return;
     }
     const hp = getCarHealth(car);
@@ -1391,6 +1293,10 @@ function saveCarExit(car) {
     }
     const mid = getCarModelId(car);
     if (mid <= 0) return;
+    const plate = CFG.tagLicensePlates ? (CFG.customPlateText || "PARKED") : getCarNumberPlate(car);
+    if (CFG.tagLicensePlates) {
+      setCarNumberPlate(car, plate);
+    }
     const cp     = getCarPos(car);
     const hdg    = getCarHdg(car);
     const clrs   = getCarColors(car);
@@ -1408,7 +1314,8 @@ function saveCarExit(car) {
       paintjob: pj, health: (CFG.saveHealth ? hp : 1000),
       tires: (CFG.saveTires ? tires : []),
       panels: dam.panels, doors: dam.doors,
-      upgrades: mods, extras: extras
+      upgrades: mods, extras: extras,
+      plateText: plate
     });
     const ents = readDisk();
     ents.push(line);
@@ -1418,8 +1325,8 @@ function saveCarExit(car) {
     const d   = parseEntry(line);
     const key = getUniqueKey(d);
     if (key) streamed[key] = car;
-    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " | Health: " + hp + " HP (" + line + ")");
-    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name);
+    log("LOGGER: SUCCESS! Saved exit for " + name + " at " + cp.x.toFixed(0) + "," + cp.y.toFixed(0) + " (Plate: " + plate + ") | Health: " + hp + " HP");
+    if (CFG.tooltips) showTextBox("~g~Saved ~y~" + name + "~n~~w~Plate: ~y~" + plate);
   } catch(e) {
     log("LOGGER: saveCarExit error: " + (e.stack || e));
   }
@@ -1483,6 +1390,7 @@ function parseEntry(line) {
           else if (flags.indexOf("n3") !== -1) extras.nitroModId = 1009;
           else if (flags.indexOf("n5") !== -1) extras.nitroModId = 1010;
         }
+        const plateText = (parts[11] && parts[11].trim().length > 0) ? parts[11].trim().substring(0, 8).toUpperCase() : (CFG.tagLicensePlates ? (CFG.customPlateText || "PARKED") : "");
         return {
           modelId: mid,
           name: getVehicleName(mid),
@@ -1499,6 +1407,7 @@ function parseEntry(line) {
           doors: doors,
           upgrades: upgrades,
           extras: extras,
+          plateText: plateText,
         };
       }
     }
@@ -1614,10 +1523,10 @@ function loadConfig() {
     if (h !== null && h !== undefined) CFG.saveHealth = (h === 1);
     const pt = IniFile.ReadInt(CONFIG_PATH, "Settings", "SavePoppedTires");
     if (pt !== null && pt !== undefined) CFG.saveTires = (pt === 1);
-    const pmv = IniFile.ReadInt(CONFIG_PATH, "Settings", "PreventMissionVehicles");
-    if (pmv !== null && pmv !== undefined) CFG.preventMissionVehicles = (pmv === 1);
-    const asm = IniFile.ReadInt(CONFIG_PATH, "Settings", "AutoSaveMenuOnMissionPassed");
-    if (asm !== null && asm !== undefined) CFG.autoSaveMenuOnMissionPassed = (asm === 1);
+    const tlp = IniFile.ReadInt(CONFIG_PATH, "Settings", "TagLicensePlates");
+    if (tlp !== null && tlp !== undefined) CFG.tagLicensePlates = (tlp === 1);
+    const cpt = IniFile.ReadString(CONFIG_PATH, "Settings", "CustomPlateText");
+    if (cpt && cpt !== "NotFound" && cpt.trim().length > 0) CFG.customPlateText = cpt.trim().substring(0, 8).toUpperCase();
     const mk = IniFile.ReadInt(CONFIG_PATH, "Settings", "MenuKeyCode");
     if (mk && mk > 0) CFG.menuKey = mk; else CFG.menuKey = VK_F6;
     const sk = IniFile.ReadInt(CONFIG_PATH, "Settings", "SpawnerKeyCode");
@@ -1793,15 +1702,9 @@ while (true) {
         const mid = getCarModelId(car);
         if (car && isCarValid(car) && mid > 0) {
           lastCarHandle = car;
-          lastCarIsMission = (CFG.preventMissionVehicles && isMissionVehicle(car));
           const vName = getVehicleName(mid);
-          if (lastCarIsMission) {
-            log("LOGGER: Entered vehicle model " + mid + " (" + vName + ") [MISSION VEHICLE - BYPASSED]");
-            if (CFG.tooltips) showTextBox("~y~Mission vehicle detected!~n~~w~Storage bypassed for ~y~" + vName);
-          } else {
-            log("LOGGER: Entered vehicle model " + mid + " (" + vName + ")");
-            tryClaimCar(car, char);
-          }
+          log("LOGGER: Entered vehicle model " + mid + " (" + vName + ")");
+          tryClaimCar(car, char);
           probeAndCacheTunability(car, mid);
         }
       } catch(e) {
@@ -1819,76 +1722,20 @@ while (true) {
     log("LOGGER: Exited vehicle, checking handle...");
     if (lastCarHandle && isCarValid(lastCarHandle)) {
       try {
-        const isMission = lastCarIsMission || (CFG.preventMissionVehicles && isMissionVehicle(lastCarHandle));
-        if (isMission) {
-          const vMid = getCarModelId(lastCarHandle);
-          const vName = getVehicleName(vMid);
-          log("LOGGER: Exited mission vehicle / during mission — ignored & discarded (" + vName + ")");
-          if (CFG.tooltips) showTextBox("~r~Mission vehicle bypassed!~n~~w~Exit position not saved for ~y~" + vName);
+        const hp = getCarHealth(lastCarHandle);
+        if (hp > 250 && isCarUsable(lastCarHandle)) {
+          log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
+          pending.push({ car: lastCarHandle, t: Date.now() });
         } else {
-          const hp = getCarHealth(lastCarHandle);
-          if (hp > 250 && isCarUsable(lastCarHandle)) {
-            log("LOGGER: Added vehicle handle to pending exit queue (Health: " + hp + " HP)");
-            pending.push({ car: lastCarHandle, t: Date.now() });
-          } else {
-            log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
-            if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
-          }
+          log("LOGGER: Exited vehicle with health <= 250 (" + hp + " HP) — ignored & discarded");
+          if (CFG.tooltips && !fireNotified) showTextBox("~r~Vehicle destroyed!~n~~w~Exit position not saved.");
         }
       } catch(e) {
         log("LOGGER: Error on exit check: " + (e.stack || e));
       }
     }
     lastCarHandle = null;
-    lastCarIsMission = false;
   }
   runPending(char);
   runStreamer(char);
-
-  // Track Mission Completion & Save Menu Trigger
-  const currentlyOnMission = isOnMission();
-  if (currentlyOnMission) {
-    if (!wasOnMission) {
-      wasOnMission = true;
-      try {
-        if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-          missionPassedOnStart = Memory.Read(0xBA67A4, 4, false) || 0;
-        } else if (typeof READ_MEMORY === 'function') {
-          missionPassedOnStart = READ_MEMORY(0xBA67A4, 4, false) || 0;
-        }
-      } catch(e) {
-        missionPassedOnStart = 0;
-      }
-      log("LOGGER: Mission started (Missions passed count: " + missionPassedOnStart + ")");
-    }
-  } else if (wasOnMission) {
-    wasOnMission = false;
-    let currentPassed = 0;
-    try {
-      if (typeof Memory !== 'undefined' && typeof Memory.Read === 'function') {
-        currentPassed = Memory.Read(0xBA67A4, 4, false) || 0;
-      } else if (typeof READ_MEMORY === 'function') {
-        currentPassed = READ_MEMORY(0xBA67A4, 4, false) || 0;
-      }
-    } catch(e) {}
-
-    const playerDead = player.isDead();
-    const missionPassed = (currentPassed > missionPassedOnStart) || (!playerDead);
-
-    if (missionPassed && !playerDead) {
-      log("LOGGER: Mission completed successfully! Auto-Save Menu scheduled in 2.0s.");
-      if (CFG.tooltips) showTextBox("~g~Mission Passed!~n~~w~Opening Save Menu...");
-      pendingSaveMenuMs = Date.now() + 2000;
-    } else {
-      log("LOGGER: Mission ended without completion (failed or player died).");
-    }
-  }
-
-  // Trigger Save Menu when timer expires
-  if (pendingSaveMenuMs > 0 && Date.now() >= pendingSaveMenuMs) {
-    pendingSaveMenuMs = 0;
-    if (!player.isDead() && CFG.autoSaveMenuOnMissionPassed) {
-      openSaveMenu();
-    }
-  }
 }

@@ -1,12 +1,13 @@
 # GTA SA Parked Vehicles Persistent Streamer
 
-A CLEO Redux script (`car_exit_logger[fs][mem].sa.js`) for Grand Theft Auto: San Andreas. The system automatically records, saves, and streams back every vehicle exited by the player, retaining location, orientation, colors, visual damage, popped tires, tuning upgrades, paintjobs, and health across game sessions and reloads.
+A CLEO Redux script (`car_exit_logger[fs].sa.js`) for Grand Theft Auto: San Andreas. The system automatically records, saves, and streams back every vehicle exited by the player, retaining location, orientation, colors, visual damage, popped tires, tuning upgrades, paintjobs, health, and custom license plates across game sessions and reloads.
 
 ---
 
 ## Features
 
 - **Automatic Exit Persistence**: Automatically saves vehicle state when the player exits a vehicle and stops moving.
+- **License Plate Tagging**: Automatically tags saved/parked vehicles with a custom license plate (e.g., `PARKED`, `GARAGE`) to easily identify stored vehicles in-game.
 - **Dynamic Distance-Based Streaming**: Spawns and despawns vehicles within a configurable radius around the player (`streamRadius`) without exceeding memory limits (`maxStreamed`).
 - **State Auto-Update**: Detects when a parked vehicle is moved or damaged while stationary, dynamically updating its entry in disk storage.
 - **Vehicle Reclaim System**: When the player re-enters a persistent parked vehicle, its record is claimed and removed from disk so it becomes a standard player vehicle again.
@@ -29,6 +30,8 @@ The script reads its configuration settings from `cleo\car_exit_logger.ini`. Bel
 | `UnlockDoors` | `1` | Automatically unlocks vehicle doors upon spawn (`1` = enabled, `0` = locked). |
 | `SaveHealth` | `1` | Saves exact vehicle engine health (`1` = enabled, `0` = force 1000 HP). |
 | `SaveTires` | `1` | Saves popped tire states (`1` = enabled, `0` = standard intact tires). |
+| `TagLicensePlates` | `1` | Automatically tags stored vehicles with custom license plates (`1` = enabled, `0` = disabled). |
+| `CustomPlateText` | `PARKED` | License plate text applied to stored vehicles (max 8 characters, e.g. `PARKED`). |
 | `Tooltips` | `1` | Displays top-right HUD notification text boxes for actions (`1` = enabled, `0` = disabled). |
 
 ---
